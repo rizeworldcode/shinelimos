@@ -2,11 +2,11 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { PageHero, GoldButton, GoldDivider } from "../components/ui";
 import SectionBackground from "../components/SectionBackground";
- import TimePicker from "../components/TimePicker";
-import { initiateBooking, finalizeBooking } from "../utils/api";
+import TimePicker from "../components/TimePicker";
+import { FLEET } from "../data";
 
 const BG = "https://images.pexels.com/photos/8605325/pexels-photo-8605325.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=1600&w=2400";
-import { CheckCircle, ArrowRight, ArrowLeft, MapPin, Calendar, Users, Car, User, Mail, Phone, Clock, Trash2, Plus, Briefcase, Loader2 } from "lucide-react";
+import { CheckCircle, ArrowRight, ArrowLeft, MapPin, Calendar, Users, Car, User, Mail, Phone, Clock, Trash2, Plus, Briefcase } from "lucide-react";
 
 const STEPS = ["Trip Itinerary", "Vehicle Selection", "Summary", "Contact Info"];
 
@@ -15,12 +15,9 @@ export default function Booking() {
   const [step, setStep] = useState(0);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [bookingId, setBookingId] = useState<string | null>(null);
-  const [availableVehicles, setAvailableVehicles] = useState<any[]>([]);
 
   const [data, setData] = useState({
-    type: params.get("type") || "One Way",
+    type: params.get("type") || "one-way",
     pax: Number(params.get("pax")) || 2,
     bags: 0,
     bagSize: "",
@@ -34,12 +31,9 @@ export default function Booking() {
         pickup: params.get("pickup") || "",
         dropoff: params.get("dropoff") || "",
         comments: "",
-        total_passengers: params.get("pax") || "2",
-        total_luggage: "0",
       }
     ],
-    vehicle_id: "",
-    vehicle_details: null as any,
+    vehicle: params.get("vehicle") || "",
     firstName: "",
     lastName: "",
     company: "",
@@ -49,10 +43,6 @@ export default function Booking() {
     secondaryPhone: "",
     secondaryPhoneType: "Home",
     isPassenger: true,
-    passengerFirstName: "",
-    passengerLastName: "",
-    passengerEmail: "",
-    passengerPhone: "",
     notes: "",
     userLocation: "",
   });
@@ -69,12 +59,13 @@ export default function Booking() {
     }
   }, []);
 
+  const selectedVehicle = FLEET.find((v) => v.slug === data.vehicle) || null;
   const update = (k: string, v: any) => {
     setError(null);
     setData((d) => ({ ...d, [k]: v }));
   };
   
-  const next = async () => {
+  const next = () => {
     if (step === 0) {
       if (!data.type) {
         setError("Please select a Trip Type.");
@@ -87,47 +78,8 @@ export default function Booking() {
           return;
         }
       }
-
-      // Step 1 API Call: Initiate Booking
-      setLoading(true);
-      try {
-        const tripDetails = data.segments.map(s => ({
-          date: s.date,
-          pickup_location: s.pickup,
-          dropoff_location: s.dropoff,
-          start_time: s.time,
-          duration: s.duration, // Sending duration directly from frontend
-          comment: s.comments || "No comments",
-          trip_type: data.type,
-          occasion: data.occasion || "Business",
-          total_passengers: String(data.pax),
-          total_luggage: String(data.bags),
-          flight_details: {
-            international: false,
-            domestic: false,
-            departure: false,
-            arrival: false
-          }
-        }));
-
-        const response = await initiateBooking(tripDetails);
-        if (response.success) {
-          setBookingId(response.booking_id);
-          setAvailableVehicles(response.available_vehicles);
-        } else {
-          setError(response.message || "Failed to fetch vehicles.");
-          setLoading(false);
-          return;
-        }
-      } catch (err: any) {
-        setError(err.message || "Something went wrong.");
-        setLoading(false);
-        return;
-      }
-      setLoading(false);
-
     } else if (step === 1) {
-      if (!data.vehicle_id) {
+      if (!data.vehicle) {
         setError("Please select a vehicle to continue.");
         return;
       }
@@ -141,43 +93,7 @@ export default function Booking() {
     setStep((s) => Math.max(0, s - 1));
   };
 
-  const submit = async () => {
-    setLoading(true);
-    try {
-      const payload = {
-        booking_id: bookingId,
-        vehicle_details: data.vehicle_details,
-        contact_details: {
-          booker: {
-            first_name: data.firstName,
-            last_name: data.lastName,
-            company_name: data.company,
-            email: data.email,
-            primary_phone: { number: data.primaryPhone, type: data.primaryPhoneType },
-            secondary_phone: { number: data.secondaryPhone, type: data.secondaryPhoneType },
-            is_passenger: data.isPassenger
-          },
-          passenger: data.isPassenger ? undefined : {
-            first_name: data.passengerFirstName,
-            last_name: data.passengerLastName,
-            primary_phone: { number: data.passengerPhone, type: "Cellular" },
-            email: data.passengerEmail
-          }
-        },
-        special_requests: data.notes
-      };
-
-      const response = await finalizeBooking(payload);
-      if (response.success) {
-        setDone(true);
-      } else {
-        setError(response.message || "Failed to confirm reservation.");
-      }
-    } catch (err: any) {
-      setError(err.message || "Something went wrong.");
-    }
-    setLoading(false);
-  };
+  const submit = () => setDone(true);
 
   if (done) {
     return (
@@ -195,8 +111,7 @@ export default function Booking() {
               confirm details and process a soft authorization on your card. No charge until 24 hours before pickup.
             </p>
             <div className="mt-8 grid sm:grid-cols-2 gap-4 text-left text-sm">
-              <Detail label="Vehicle" value={data.vehicle_details?.vehicle_name || "Not selected"} />
-              <Detail label="Estimated Price" value={`$${data.vehicle_details?.estimated_price || "0"}`} />
+              <Detail label="Vehicle" value={selectedVehicle?.name || "Not selected"} />
               <Detail label="Passengers" value={`${data.pax}`} />
               <Detail label="Luggage" value={data.bags > 0 ? `${data.bags} ${data.bagSize ? `(${data.bagSize})` : ""}` : "None"} />
               <Detail label="Pickup" value={data.segments[0]?.pickup} />
@@ -241,8 +156,8 @@ export default function Booking() {
 
           <div className="glass-dark rounded-3xl p-6 md:p-10 min-h-[520px]">
             {step === 0 && <Step1 data={data} update={update} />}
-            {step === 1 && <Step2 data={data} update={update} availableVehicles={availableVehicles} />}
-            {step === 2 && <Step3Summary data={data} />}
+            {step === 1 && <Step2 data={data} update={update} />}
+            {step === 2 && <Step3Summary data={data} vehicle={selectedVehicle} />}
             {step === 3 && <Step4Contact data={data} update={update} />}
 
             {error && (
@@ -260,12 +175,12 @@ export default function Booking() {
                 </button>
               ) : <span />}
               {step < STEPS.length - 1 ? (
-                <GoldButton onClick={next} disabled={loading}>
-                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <>Continue <ArrowRight className="h-4 w-4" /></>}
+                <GoldButton onClick={next}>
+                  Continue <ArrowRight className="h-4 w-4" />
                 </GoldButton>
               ) : (
-                <GoldButton onClick={submit} disabled={loading}>
-                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <>Confirm Reservation <CheckCircle className="h-4 w-4" /></>}
+                <GoldButton onClick={submit}>
+                  Confirm Reservation <CheckCircle className="h-4 w-4" />
                 </GoldButton>
               )}
             </div>
@@ -463,39 +378,30 @@ function Step1({ data, update }: any) {
   );
 }
 
-function Step2({ data, update, availableVehicles }: any) {
+function Step2({ data, update }: any) {
   return (
     <>
       <h3 className="font-serif-lux text-3xl gradient-gold-text">Select Your Vehicle</h3>
       <p className="text-white/55 mt-1 text-sm">Six classes, hand-picked for every occasion.</p>
       <div className="mt-6 grid gap-4 md:grid-cols-2">
-        {availableVehicles.map((v: any) => {
-          const active = data.vehicle_id === v._id;
+        {FLEET.map((v) => {
+          const active = data.vehicle === v.slug;
           return (
             <button
-              key={v._id}
-              onClick={() => {
-                update("vehicle_id", v._id);
-                update("vehicle_details", {
-                  vehicle_id: v._id,
-                  vehicle_name: v.vehicle_name,
-                  image: v.image,
-                  price_snapshot: v.price_snapshot || {},
-                  estimated_price: v.estimated_price
-                });
-              }}
+              key={v.slug}
+              onClick={() => update("vehicle", v.slug)}
               className={`text-left rounded-2xl overflow-hidden border transition-all ${
                 active ? "border-gold/60 bg-gold/5 scale-[1.01]" : "border-white/10 hover:border-white/30 bg-white/2"
               }`}
             >
               <div className="flex gap-4 p-4">
-                <img src={v.image.startsWith('http') ? v.image : `http://localhost:60000${v.image}`} alt={v.vehicle_name} className="w-28 h-20 object-cover rounded-lg shrink-0" loading="lazy" />
+                <img src={v.image} alt={v.name} className="w-28 h-20 object-cover rounded-lg shrink-0" loading="lazy" />
                 <div className="flex-1 min-w-0">
-                  <div className="text-[10px] tracking-[0.25em] text-gold uppercase">{v.vehicle_name}</div>
-                  <div className="font-serif-lux text-lg text-white mt-0.5">${v.estimated_price}</div>
+                  <div className="text-[10px] tracking-[0.25em] text-gold uppercase">{v.category}</div>
+                  <div className="font-serif-lux text-lg text-white mt-0.5">{v.name}</div>
                   <div className="text-xs text-white/55 mt-1 flex gap-3">
-                    <span><Users className="inline h-3 w-3 mr-1 text-gold" />Fits {v.passenger_capacity} Passengers</span>
-                    <span><Car className="inline h-3 w-3 mr-1 text-gold" />{v.luggage_capacity} Bags</span>
+                    <span><Users className="inline h-3 w-3 mr-1 text-gold" />Fits {v.passengers} Passengers</span>
+                    <span><Car className="inline h-3 w-3 mr-1 text-gold" />{v.luggage} Bags</span>
                   </div>
                 </div>
               </div>
@@ -507,8 +413,7 @@ function Step2({ data, update, availableVehicles }: any) {
   );
 }
 
-function Step3Summary({ data }: any) {
-  const vehicle = data.vehicle_details;
+function Step3Summary({ data, vehicle }: any) {
   return (
     <>
       <h3 className="font-serif-lux text-3xl gradient-gold-text">Summary</h3>
@@ -531,9 +436,8 @@ function Step3Summary({ data }: any) {
       </div>
 
       <div className="mt-6 grid md:grid-cols-2 gap-4 p-4 border border-white/10 rounded-xl bg-white/5">
-        <Detail label="Service Type" value={data.type} />
-        <Detail label="Vehicle" value={vehicle?.vehicle_name || "Not selected"} />
-        <Detail label="Estimated Total" value={`$${vehicle?.estimated_price || "0"}`} />
+        <Detail label="Service Type" value={data.type === "one-way" ? "Point-to-Point" : data.type === "hourly" ? "By the Hour" : "Airport Transfer"} />
+        <Detail label="Vehicle" value={vehicle?.name || "Not selected"} />
         <Detail label="Passengers" value={String(data.pax)} />
         <Detail label="Luggage" value={data.bags > 0 ? `${data.bags} ${data.bagSize ? `(${data.bagSize})` : ""}` : "None"} />
         <Detail label="Occasion" value={data.occasion || "Not specified"} />
@@ -609,26 +513,6 @@ function Step4Contact({ data, update }: any) {
             </button>
           </div>
         </div>
-
-        {!data.isPassenger && (
-          <div className="space-y-6 pt-4 border-t border-white/5 animate-in fade-in slide-in-from-top-2">
-            <div className="text-[10px] tracking-[0.25em] text-gold uppercase font-medium">Passenger Information</div>
-            <div className="grid gap-5 md:grid-cols-2">
-              <Field icon={User} label="First Name *">
-                <input className={inputCls()} value={data.passengerFirstName} onChange={(e) => update("passengerFirstName", e.target.value)} placeholder="Passenger first name" />
-              </Field>
-              <Field icon={User} label="Last Name">
-                <input className={inputCls()} value={data.passengerLastName} onChange={(e) => update("passengerLastName", e.target.value)} placeholder="Passenger last name" />
-              </Field>
-              <Field icon={Mail} label="Email Address *">
-                <input type="email" className={inputCls()} value={data.passengerEmail} onChange={(e) => update("passengerEmail", e.target.value)} placeholder="passenger@example.com" />
-              </Field>
-              <Field icon={Phone} label="Primary Phone Number *">
-                <input type="tel" className={inputCls()} value={data.passengerPhone} onChange={(e) => update("passengerPhone", e.target.value)} placeholder="(202) 555-0000" />
-              </Field>
-            </div>
-          </div>
-        )}
       </div>
 
       <div className="text-[10px] tracking-[0.25em] text-gold uppercase py-3 px-5 rounded-t-2xl border border-white/10 border-b-0 bg-white/5 font-medium mt-6">Comments</div>

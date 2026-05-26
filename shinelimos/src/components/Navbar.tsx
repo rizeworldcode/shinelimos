@@ -154,6 +154,12 @@ export default function Navbar() {
               <span className="font-light tracking-wide">{COMPANY.phone}</span>
             </a>
             <Link
+              to="/admin-login"
+              className="relative overflow-hidden rounded-full border border-white bg-black/50 px-5 py-2 text-xs font-medium tracking-widest text-white transition-all hover:bg-white/20 hover:shadow-[0_0_15px_rgba(255,255,255,0.4)]"
+            >
+              Admin Login
+            </Link>
+            <Link
               to="/booking"
               className="relative overflow-hidden rounded-full bg-white px-6 py-2.5 text-sm font-medium tracking-[0.15em] uppercase text-black transition-transform hover:scale-105 pulse-gold"
             >
@@ -195,6 +201,12 @@ export default function Navbar() {
               Book Now
             </Link>
           </div>
+          <Link
+            to="/admin-login"
+            className="block w-full rounded-xl border border-white/20 bg-black/50 mt-3 py-3 text-center text-sm font-medium text-white transition-all hover:bg-white/10 hover:shadow-[0_0_15px_rgba(255,255,255,0.2)]"
+          >
+            Admin Login
+          </Link>
         </div>
       </div>
     </header>

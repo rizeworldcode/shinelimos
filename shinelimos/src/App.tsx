@@ -1,4 +1,4 @@
-import { HashRouter, Routes, Route } from "react-router-dom";
+import { HashRouter, Routes, Route, useLocation } from "react-router-dom";
 import Background from "./components/Background";
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
@@ -18,13 +18,25 @@ import Terms from "./pages/Terms";
 import Privacy from "./pages/Privacy";
 import Faq from "./pages/Faq";
 
-export default function App() {
+import AdminLogin from "./pages/admin/AdminLogin";
+import ForgotPassword from "./pages/admin/ForgotPassword";
+import VerifyOtp from "./pages/admin/VerifyOtp";
+import ResetPassword from "./pages/admin/ResetPassword";
+import AdminLayout from "./layouts/admin/AdminLayout";
+import AdminDashboard from "./pages/admin/AdminDashboard";
+import AdminVehicles from "./pages/admin/AdminVehicles";
+import AdminBookings from "./pages/admin/AdminBookings";
+
+function AppContent() {
+  const location = useLocation();
+  const isAdminRoute = location.pathname.startsWith("/admin") || location.pathname === "/forgot-password" || location.pathname === "/verify-otp" || location.pathname === "/reset-password";
+
   return (
-    <HashRouter>
-      <ScrollToTop />
+    <>
       <Background />
-      <Navbar />
-      <main className="relative">
+      {!isAdminRoute && <Navbar />}
+      
+      <main className={isAdminRoute ? "" : "relative"}>
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/about" element={<About />} />
@@ -38,11 +50,36 @@ export default function App() {
           <Route path="/terms" element={<Terms />} />
           <Route path="/privacy" element={<Privacy />} />
           <Route path="/faq" element={<Faq />} />
+          
+          {/* Admin Auth Routes */}
+          <Route path="/admin-login" element={<AdminLogin />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/verify-otp" element={<VerifyOtp />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
+
+          {/* Admin Dashboard Routes */}
+          <Route path="/admin-dashboard" element={<AdminLayout />}>
+            <Route index element={<AdminDashboard />} />
+            <Route path="vehicles" element={<AdminVehicles />} />
+            <Route path="bookings" element={<AdminBookings />} />
+            <Route path="*" element={<div className="text-white text-center py-20 text-xl font-light">Page under construction</div>} />
+          </Route>
+
           <Route path="*" element={<Home />} />
         </Routes>
       </main>
-      <Footer />
-      <CallNowButton />
+
+      {!isAdminRoute && <Footer />}
+      {!isAdminRoute && <CallNowButton />}
+    </>
+  );
+}
+
+export default function App() {
+  return (
+    <HashRouter>
+      <ScrollToTop />
+      <AppContent />
     </HashRouter>
   );
 }

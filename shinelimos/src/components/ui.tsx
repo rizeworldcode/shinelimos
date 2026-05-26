@@ -43,8 +43,7 @@ export function GoldButton({
   variant = "solid",
   className = "",
   onClick,
-  type = "button",
-  disabled,
+  type,
 }: {
   to?: string;
   href?: string;
@@ -52,11 +51,10 @@ export function GoldButton({
   variant?: "solid" | "outline";
   className?: string;
   onClick?: () => void;
-  type?: "button" | "submit" | "reset";
-  disabled?: boolean;
+  type?: "button" | "submit";
 }) {
   const base =
-    "inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-full text-sm font-medium tracking-[0.15em] uppercase transition-all duration-300 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100";
+    "inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-full text-sm font-medium tracking-[0.15em] uppercase transition-all duration-300 hover:scale-105";
   const styles =
     variant === "solid"
       ? "bg-white text-black shadow-lg shadow-white/10 hover:shadow-white/30"
@@ -64,10 +62,10 @@ export function GoldButton({
 
   const cls = `${base} ${styles} ${className}`;
 
-  if (to) return <Link to={to} className={`${cls} ${disabled ? "pointer-events-none" : ""}`}>{children}</Link>;
-  if (href) return <a href={href} className={`${cls} ${disabled ? "pointer-events-none" : ""}`}>{children}</a>;
+  if (to) return <Link to={to} className={cls}>{children}</Link>;
+  if (href) return <a href={href} className={cls}>{children}</a>;
   return (
-    <button type={type} onClick={onClick} className={cls} disabled={disabled}>
+    <button type={type} onClick={onClick} className={cls}>
       {children}
     </button>
   );
