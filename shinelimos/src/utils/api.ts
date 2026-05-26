@@ -25,4 +25,10 @@ export const adminLogin = async (email: string, password: string) => {
   return response.data;
 };
 
+// Send OTP to admin email
+export const sendOtpToAdmin = async (email: string) => {
+  const response = await axios.post('http://localhost:60000/sendOtpTOadmin', { email }, { withCredentials: true });
+  return response.data;
+};
+
 export default api;

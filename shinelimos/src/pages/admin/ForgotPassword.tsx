@@ -1,15 +1,35 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
+import { sendOtpToAdmin } from "../../utils/api";
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
   const navigate = useNavigate();
 
-  const handleSendOtp = (e: React.FormEvent) => {
+  const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (email) {
-      navigate("/verify-otp");
+    setError(null);
+    if (!email) {
+      setError("Email is required.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await sendOtpToAdmin(email);
+      if (!res || !res.success) {
+        setError(res?.message || "Failed to send OTP");
+        return;
+      }
+      setSuccess(true);
+      setTimeout(() => navigate("/verify-otp", { state: { email } }), 1500);
+    } catch (err: any) {
+      setError(err?.message || "Network error");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -43,10 +63,13 @@ export default function ForgotPassword() {
             
             <button 
               type="submit"
-              className="w-full mt-2 bg-white hover:bg-gray-200 text-black px-6 py-4 rounded-xl text-sm font-bold tracking-wider uppercase transition-all shadow-[0_0_20px_rgba(255,255,255,0.15)] hover:shadow-[0_0_30px_rgba(255,255,255,0.25)] hover:-translate-y-0.5"
+              disabled={loading || success}
+              className={`w-full mt-2 ${success ? 'bg-green-500 hover:bg-green-600' : loading ? 'opacity-60 cursor-wait' : 'bg-white hover:bg-gray-200'} ${success ? 'text-white' : 'text-black'} px-6 py-4 rounded-xl text-sm font-bold tracking-wider uppercase transition-all shadow-[0_0_20px_rgba(255,255,255,0.15)] hover:shadow-[0_0_30px_rgba(255,255,255,0.25)] hover:-translate-y-0.5`}
             >
-              Send OTP
+              {success ? '✓ OTP Sent!' : loading ? 'Sending…' : 'Send OTP'}
             </button>
+            {error && <div className="mt-3 text-sm text-red-400 text-center">{error}</div>}
+            {success && <div className="mt-3 text-sm text-green-400 text-center">Check your email for the OTP.</div>}
           </form>
         </div>
       </div>
