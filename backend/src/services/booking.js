@@ -15,9 +15,12 @@ const notifyAdmin = async (booking) => {
 			pickup: booking.trip_details[0].pickup_location,
 			dropoff: booking.trip_details[0].dropoff_location,
 			estimated_price: booking.vehicle_details.estimated_price,
+			vehicle_name: booking.vehicle_details.vehicle_name,
 			date: moment(booking.trip_details[0].date).format("MMM DD, YYYY"),
 			time: booking.trip_details[0].start_time,
-			message: "New booking received!"
+			message: "New booking received!",
+			type: "Booking",
+			payment_status: "Pending"
 		};
 
 		// 1. Emit real-time notification

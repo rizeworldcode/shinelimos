@@ -1,6 +1,61 @@
-import { TrendingUp, TrendingDown, Users, CheckSquare, DollarSign } from "lucide-react";
+import { useState, useEffect } from "react";
+import { TrendingUp, TrendingDown, Users, CheckSquare, DollarSign, Loader2 } from "lucide-react";
+import { getDashboardData } from "../../utils/api";
 
 export default function AdminDashboard() {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await getDashboardData();
+      if (response.success) {
+        setData(response);
+      } else {
+        setError(response.message || "Failed to fetch dashboard data");
+      }
+    } catch (error) {
+      console.error("Error fetching dashboard data:", error);
+      setError("An unexpected error occurred while fetching dashboard data.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-white/50">
+        <Loader2 className="animate-spin mb-4" size={32} />
+        <p>Loading dashboard...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-white">
+        <div className="bg-red-500/10 border border-red-500/20 p-6 rounded-2xl text-center max-w-md">
+          <p className="text-red-400 mb-4">{error}</p>
+          <button 
+            onClick={fetchDashboardData}
+            className="bg-white text-black px-6 py-2 rounded-xl text-sm font-medium hover:bg-white/90 transition-colors"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!data) return null;
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
@@ -20,25 +75,25 @@ export default function AdminDashboard() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <StatCard 
           title="Total Booking" 
-          value="7,265" 
-          change="+11.01%" 
-          isPositive={true} 
+          value={data.overview.total_booking.value} 
+          change={data.overview.total_booking.trend} 
+          isPositive={data.overview.total_booking.trend.startsWith('+')} 
           icon={<CheckSquare className="text-white" size={20} />} 
           bg="bg-white/5 border-white/20"
         />
         <StatCard 
           title="Total New Customers" 
-          value="3,671" 
-          change="-0.03%" 
-          isPositive={false} 
+          value={data.overview.total_new_customers.value} 
+          change={data.overview.total_new_customers.trend} 
+          isPositive={data.overview.total_new_customers.trend.startsWith('+')} 
           icon={<Users className="text-white" size={20} />} 
           bg="bg-white/5 border-white/20"
         />
         <StatCard 
           title="Total Earning" 
-          value="$22,318" 
-          change="+6.08%" 
-          isPositive={true} 
+          value={`$${data.overview.total_earning.value.toLocaleString()}`} 
+          change={data.overview.total_earning.trend} 
+          isPositive={data.overview.total_earning.trend.startsWith('+')} 
           icon={<DollarSign className="text-white" size={20} />} 
           bg="bg-white/5 border-white/20"
         />
@@ -72,54 +127,51 @@ export default function AdminDashboard() {
           
           {/* Y-axis labels */}
           <div className="absolute left-0 inset-y-0 flex flex-col justify-between text-[10px] text-white pb-6">
-            <span>$40k</span>
+            <span>${Math.ceil(Math.max(...data.revenue_overview.this_year.map((r: any) => r.revenue), ...data.revenue_overview.last_year.map((r: any) => r.revenue), 40000) / 1000)}k</span>
             <span>$30k</span>
             <span>$20k</span>
             <span>$10k</span>
             <span>$0</span>
           </div>
 
-          {[
-            { month: "Jan", thisYear: 60, lastYear: 40 },
-            { month: "Feb", thisYear: 45, lastYear: 55 },
-            { month: "Mar", thisYear: 80, lastYear: 60 },
-            { month: "Apr", thisYear: 65, lastYear: 50 },
-            { month: "May", thisYear: 90, lastYear: 75 },
-            { month: "Jun", thisYear: 70, lastYear: 65 },
-            { month: "Jul", thisYear: 85, lastYear: 70 },
-            { month: "Aug", thisYear: 55, lastYear: 60 },
-            { month: "Sep", thisYear: 75, lastYear: 65 },
-            { month: "Oct", thisYear: 60, lastYear: 55 },
-            { month: "Nov", thisYear: 80, lastYear: 70 },
-            { month: "Dec", thisYear: 95, lastYear: 85 },
-          ].map((data, i) => (
-            <div key={i} className="flex-1 flex flex-col items-center justify-end group relative z-10 h-full pb-6">
-              <div className="w-full flex items-end justify-center gap-1 px-1 h-full">
-                {/* Last Year Bar */}
+          {["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].map((month, i) => {
+            const thisYearData = data.revenue_overview.this_year.find((r: any) => r.month === month)?.revenue || 0;
+            const lastYearData = data.revenue_overview.last_year.find((r: any) => r.month === month)?.revenue || 0;
+            
+            const maxRevenue = Math.max(...data.revenue_overview.this_year.map((r: any) => r.revenue), ...data.revenue_overview.last_year.map((r: any) => r.revenue), 40000);
+            
+            const thisYearHeight = (thisYearData / maxRevenue) * 100;
+            const lastYearHeight = (lastYearData / maxRevenue) * 100;
+
+            return (
+              <div key={i} className="flex-1 flex flex-col items-center justify-end group relative z-10 h-full pb-6">
+                <div className="w-full flex items-end justify-center gap-1 px-1 h-full">
+                  {/* Last Year Bar */}
                 <div 
-                  className="w-full max-w-[12px] bg-white/20 rounded-t-sm group-hover:bg-white/30 transition-colors"
-                  style={{ height: `${data.lastYear}%` }}
+                  className="w-full max-w-3 bg-white/20 rounded-t-sm group-hover:bg-white/30 transition-colors"
+                  style={{ height: `${lastYearHeight}%` }}
                 ></div>
                 {/* This Year Bar */}
                 <div 
-                  className="w-full max-w-[12px] bg-white rounded-t-sm group-hover:bg-white transition-colors shadow-[0_0_10px_rgba(52,211,153,0.3)]"
-                  style={{ height: `${data.thisYear}%` }}
+                  className="w-full max-w-3 bg-white rounded-t-sm group-hover:bg-white transition-colors shadow-[0_0_10px_rgba(52,211,153,0.3)]"
+                  style={{ height: `${thisYearHeight}%` }}
                 ></div>
+                </div>
+                <span className="text-[10px] text-white mt-2 absolute bottom-0">{month}</span>
               </div>
-              <span className="text-[10px] text-white mt-2 absolute bottom-0">{data.month}</span>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Total Trips */}
         <div className="lg:col-span-2 glass-dark rounded-2xl border border-white/5 p-6 hover:border-white/10 transition-colors">
-          <h2 className="text-lg font-semibold text-white mb-6">Total Trips - 7,265</h2>
+          <h2 className="text-lg font-semibold text-white mb-6">Total Trips - {data.overview.total_booking.value}</h2>
           <div className="space-y-6">
-            <TripProgress label="Done Trips" value={46} color="bg-white" />
-            <TripProgress label="Booked" value={17} color="bg-white" />
-            <TripProgress label="Cancelled" value={19} color="bg-white" />
+            {data.trip_summary.map((trip: any, i: number) => (
+              <TripProgress key={i} label={trip.name} value={parseInt(trip.sales)} color="bg-white" />
+            ))}
           </div>
         </div>
 
@@ -134,15 +186,21 @@ export default function AdminDashboard() {
                 <div className="absolute inset-0 rounded-full border-16 border-transparent border-l-white/20 -rotate-12"></div>
                 
                 <div className="text-center">
-                  <div className="text-2xl font-bold text-white">52%</div>
-                  <div className="text-[10px] text-white uppercase tracking-widest">US</div>
+                  <div className="text-2xl font-bold text-white">{data.top_destinations[0]?.percentage || "0%"}</div>
+                  <div className="text-[10px] text-white uppercase tracking-widest">{data.top_destinations[0]?.name || "N/A"}</div>
                 </div>
              </div>
           </div>
           <div className="mt-6 space-y-2 text-sm">
-            <div className="flex justify-between items-center"><span className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-white"></span>United States</span><span className="text-white">52.1%</span></div>
-            <div className="flex justify-between items-center"><span className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-white"></span>Canada</span><span className="text-white">22.8%</span></div>
-            <div className="flex justify-between items-center"><span className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-white/20"></span>Mexico</span><span className="text-white">13.9%</span></div>
+            {data.top_destinations.map((dest: any, i: number) => (
+              <div key={i} className="flex justify-between items-center">
+                <span className="flex items-center gap-2">
+                  <span className={`w-2 h-2 rounded-full ${i === 0 ? 'bg-white' : i === 1 ? 'bg-white/60' : 'bg-white/20'}`}></span>
+                  {dest.name}
+                </span>
+                <span className="text-white">{dest.percentage}%</span>
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -165,26 +223,21 @@ export default function AdminDashboard() {
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5 text-white">
-              {[
-                { name: "Ashwin", email: "a@email.com", trip: "Airport Transfer", date: "16 Jul 2026", price: "$120", phone: "+1 (555) 123-4567" },
-                { name: "Deeksha", email: "deeksha@email.com", trip: "Corporate Hourly", date: "15 Jul 2026", price: "$450", phone: "+1 (555) 987-6543" },
-                { name: "Prem", email: "prem@email.com", trip: "Wedding Package", date: "14 Jul 2026", price: "$1,200", phone: "+1 (555) 345-6789" },
-                { name: "Ashwin", email: "a@email.com", trip: "Point to Point", date: "16 Jul 2026", price: "$85", phone: "+1 (555) 123-4567" },
-              ].map((row, i) => (
+              {data.recent_bookings.map((row: any, i: number) => (
                 <tr key={i} className="hover:bg-white/5 transition-colors group">
                   <td className="p-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-xs font-bold">{row.name[0]}</div>
+                      <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-xs font-bold">{row.name?.[0] || "?"}</div>
                       <div>
-                        <div className="text-white font-medium">{row.name}</div>
-                        <div className="text-[11px] text-white">{row.email}</div>
+                        <div className="text-white font-medium">{row.name || "Unknown"}</div>
+                        <div className="text-[11px] text-white">{row.email || "No email"}</div>
                       </div>
                     </div>
                   </td>
-                  <td className="p-4">{row.trip}</td>
-                  <td className="p-4 text-white">{row.date}</td>
-                  <td className="p-4 text-white">{row.price}</td>
-                  <td className="p-4 text-white">{row.phone}</td>
+                  <td className="p-4">{row.trip || "N/A"}</td>
+                  <td className="p-4 text-white">{row.date || "N/A"}</td>
+                  <td className="p-4 text-white">{row.price || "N/A"}</td>
+                  <td className="p-4 text-white">{row.phone || "N/A"}</td>
                 </tr>
               ))}
             </tbody>

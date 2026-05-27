@@ -26,6 +26,14 @@ export const adminLogin = async (email: string, password: string) => {
   return response.data;
 };
 
+export const logoutAdmin = async () => {
+  const response = await axios.post(`${ADMIN_BASE_URL}/admin_logout`, {}, {
+    headers: { Authorization: `Bearer ${sessionStorage.getItem('adminToken') || localStorage.getItem('adminToken')}` },
+    withCredentials: true
+  });
+  return response.data;
+};
+
 export const sendOtpToAdmin = async (email: string) => {
   const response = await axios.post(`${ADMIN_BASE_URL}/sendOtpTOadmin`, { email }, { withCredentials: true });
   return response.data;
@@ -70,6 +78,39 @@ export const deleteVehicle = async (id: string) => {
   const response = await api.delete(`/vehicles/${encodeURIComponent(id)}`, {
     withCredentials: true,
   });
+  return response.data;
+};
+
+export const getDashboardData = async () => {
+  const response = await api.get('/dashboard');
+  return response.data;
+};
+
+// Admin profile & notifications
+export const getAdminProfile = async () => {
+  const response = await axios.get(`${ADMIN_BASE_URL}/admin/profile`, {
+    headers: { Authorization: `Bearer ${sessionStorage.getItem('adminToken') || localStorage.getItem('adminToken')}` }
+  });
+  return response.data;
+};
+
+export const getNotifications = async () => {
+  const response = await axios.get(`${ADMIN_BASE_URL}/admin/notifications`, {
+    headers: { Authorization: `Bearer ${sessionStorage.getItem('adminToken') || localStorage.getItem('adminToken')}` }
+  });
+  return response.data;
+};
+
+export const markNotificationsRead = async () => {
+  const response = await axios.patch(`${ADMIN_BASE_URL}/admin/notifications/read`, {}, {
+    headers: { Authorization: `Bearer ${sessionStorage.getItem('adminToken') || localStorage.getItem('adminToken')}` }
+  });
+  return response.data;
+};
+
+// Bookings
+export const getAllBookings = async () => {
+  const response = await api.get('/bookings');
   return response.data;
 };
 

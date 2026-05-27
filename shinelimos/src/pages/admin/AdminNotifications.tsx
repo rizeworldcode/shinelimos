@@ -1,28 +1,61 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
-import { mockNotifications } from "../../data/mockNotifications";
-import { Search, Mail, MailOpen, User, CarFront, MapPin, Banknote, Clock } from "lucide-react";
+import { getNotifications, markNotificationsRead } from "../../utils/api";
+import { Search, Mail, MailOpen, User, CarFront, MapPin, Banknote, Clock, Loader2 } from "lucide-react";
 
 export default function AdminNotifications() {
   const [searchParams] = useSearchParams();
-  const [notifications, setNotifications] = useState(mockNotifications);
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
-    const idParam = searchParams.get('id');
-    if (idParam) {
-      setSelectedId(parseInt(idParam));
-      // Mark as read when opened via URL
-      setNotifications(prev => prev.map(n => n.id === parseInt(idParam) ? { ...n, read: true } : n));
-    } else if (notifications.length > 0) {
-      setSelectedId(notifications[0].id);
-    }
-  }, [searchParams]);
+    fetchNotifications();
+  }, []);
 
-  const handleSelectNotification = (id: number) => {
+  const fetchNotifications = async () => {
+    try {
+      setLoading(true);
+      const response = await getNotifications();
+      if (response.success) {
+        const mapped = response.notifications.map((n: any) => ({
+          id: n._id,
+          title: n.type === "Booking" ? "New Booking Request" : "System Notification",
+          message: n.message,
+          time: n.time,
+          date: n.date,
+          read: n.is_read,
+          userName: n.booker_name || "Unknown User",
+          vehicleName: n.vehicle_name || "N/A",
+          source: n.pickup || "N/A",
+          destination: n.dropoff || "N/A",
+          amount: n.estimated_price ? `$${n.estimated_price}` : "N/A",
+          paymentStatus: n.payment_status || "Pending",
+          type: n.type || "Notification"
+        }));
+        setNotifications(mapped);
+
+        const idParam = searchParams.get('id');
+        if (idParam) {
+          setSelectedId(idParam);
+        } else if (mapped.length > 0) {
+          setSelectedId(mapped[0].id);
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching notifications:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSelectNotification = (id: string) => {
     setSelectedId(id);
+    // Optimistically mark as read in UI
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+    // In a real app, you might want to call an API to mark a specific notification as read
+    // For now, the "Mark all as read" button handles the backend sync
   };
 
   const selectedNotification = notifications.find(n => n.id === selectedId);
@@ -31,6 +64,15 @@ export default function AdminNotifications() {
     n.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
     n.userName.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-white/50">
+        <Loader2 className="animate-spin mb-4" size={32} />
+        <p>Loading notifications...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-[calc(100vh-120px)] bg-[#050505]/50 border border-white/10 rounded-2xl overflow-hidden glass-dark">

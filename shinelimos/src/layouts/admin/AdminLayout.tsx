@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Link, useLocation, Outlet, useNavigate } from "react-router-dom";
-import { LayoutDashboard, CarFront, LogOut, Bell, Search, Menu, X, CheckSquare } from "lucide-react";
-import { mockNotifications } from "../../data/mockNotifications";
+import { LayoutDashboard, CarFront, LogOut, Bell, Menu, X, CheckSquare } from "lucide-react";
+import { getAdminProfile, getNotifications, markNotificationsRead, logoutAdmin } from "../../utils/api";
 
 export default function AdminLayout() {
   const location = useLocation();
@@ -9,11 +9,43 @@ export default function AdminLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const notificationRef = useRef<HTMLDivElement>(null);
-  const [notifications, setNotifications] = useState(mockNotifications);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [adminData, setAdminData] = useState<any>(null);
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const unreadCount = notifications.filter(n => !n.is_read).length;
 
-  const handleNotificationClick = (id: number) => {
+  useEffect(() => {
+    fetchAdminProfile();
+    fetchNotifications();
+    
+    // Refresh notifications every minute
+    const interval = setInterval(fetchNotifications, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const fetchAdminProfile = async () => {
+    try {
+      const response = await getAdminProfile();
+      if (response.success) {
+        setAdminData(response.admin);
+      }
+    } catch (error) {
+      console.error("Error fetching admin profile:", error);
+    }
+  };
+
+  const fetchNotifications = async () => {
+    try {
+      const response = await getNotifications();
+      if (response.success) {
+        setNotifications(response.notifications);
+      }
+    } catch (error) {
+      console.error("Error fetching notifications:", error);
+    }
+  };
+
+  const handleNotificationClick = (id: string) => {
     setShowNotifications(false);
     navigate(`/admin-dashboard/notifications?id=${id}`);
   };
@@ -28,16 +60,28 @@ export default function AdminLayout() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const markAllAsRead = () => {
-    setNotifications(notifications.map(n => ({ ...n, read: true })));
+  const markAllAsRead = async () => {
+    try {
+      const response = await markNotificationsRead();
+      if (response.success) {
+        setNotifications(notifications.map(n => ({ ...n, is_read: true })));
+      }
+    } catch (error) {
+      console.error("Error marking notifications as read:", error);
+    }
   };
 
-  const handleLogout = () => {
-    // Clear any authentication tokens or session data
-    localStorage.removeItem("adminToken");
-    sessionStorage.clear();
-    // Redirect to login page and prevent going back
-    navigate("/", { replace: true });
+  const handleLogout = async () => {
+    try {
+      await logoutAdmin();
+    } catch (error) {
+      console.error("Error during logout:", error);
+    } finally {
+      localStorage.removeItem("adminToken");
+      sessionStorage.removeItem("adminToken");
+      sessionStorage.clear();
+      navigate("/", { replace: true });
+    }
   };
 
   const navItems = [
@@ -100,8 +144,6 @@ export default function AdminLayout() {
             <button className="lg:hidden text-white hover:text-white" onClick={() => setSidebarOpen(true)}>
               <Menu size={20} />
             </button>
-            
-
           </div>
 
           <div className="flex items-center gap-5">
@@ -130,15 +172,17 @@ export default function AdminLayout() {
                     {notifications.length > 0 ? (
                       notifications.map(notification => (
                         <div 
-                          key={notification.id} 
-                          onClick={() => handleNotificationClick(notification.id)}
-                          className={`p-4 border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors cursor-pointer ${!notification.read ? 'bg-white/3' : ''}`}
+                          key={notification._id} 
+                          onClick={() => handleNotificationClick(notification._id)}
+                          className={`p-4 border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors cursor-pointer ${!notification.is_read ? 'bg-white/3' : ''}`}
                         >
                           <div className="flex justify-between items-start mb-1">
-                            <h4 className={`text-sm ${!notification.read ? 'text-white font-medium' : 'text-white'}`}>{notification.title}</h4>
+                            <h4 className={`text-sm ${!notification.is_read ? 'text-white font-medium' : 'text-white'}`}>{notification.message}</h4>
                             <span className="text-[10px] text-white">{notification.time}</span>
                           </div>
-                          <p className="text-xs text-white line-clamp-2">{notification.message}</p>
+                          <p className="text-xs text-white line-clamp-2">
+                            {notification.booker_name} - {notification.pickup} to {notification.dropoff}
+                          </p>
                         </div>
                       ))
                     ) : (
@@ -152,12 +196,14 @@ export default function AdminLayout() {
             </div>
             <div className="flex items-center gap-3 border-l border-white/10 pl-5">
               <div className="text-right hidden sm:block">
-                <div className="text-sm font-medium text-white">Admin User</div>
+                <div className="text-sm font-medium text-white">{adminData?.admin_name || "Admin User"}</div>
                 <div className="text-[10px] text-white tracking-wider uppercase">Superadmin</div>
               </div>
-              <div className="w-10 h-10 rounded-full bg-linear-to-tr from-gold to-yellow-600 p-[2px]">
+              <div className="w-10 h-10 rounded-full bg-linear-to-tr from-gold to-yellow-600 p-0.5">
                 <div className="w-full h-full bg-[#111] rounded-full flex items-center justify-center border border-black">
-                  <span className="font-serif-lux text-sm text-white">A</span>
+                  <span className="font-serif-lux text-sm text-white">
+                    {adminData?.admin_name ? adminData.admin_name[0] : "A"}
+                  </span>
                 </div>
               </div>
             </div>

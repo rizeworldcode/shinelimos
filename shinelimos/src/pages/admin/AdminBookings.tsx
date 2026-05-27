@@ -1,19 +1,87 @@
-import { useState } from "react";
-import { Search, ChevronLeft, ChevronRight } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Search, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { getAllBookings } from "../../utils/api";
+import moment from "moment";
 
 export default function AdminBookings() {
   const [searchTerm, setSearchTerm] = useState("");
+  const [bookings, setBookings] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
-  const bookings = [
-    { id: 1, customer: "Ashwin", email: "a@email.com", vehicle: "Rolls Royce Phantom", occasion: "Wedding", tripType: "Round Trip", date: "16 Jul 2025", status: "Pending", color: "text-white bg-white/10" },
-    { id: 2, customer: "Deeksha", email: "deeksha@email.com", vehicle: "Mercedes Maybach S-Class", occasion: "Business", tripType: "As Directed/Hourly", date: "15 Jul 2025", status: "Confirmed", color: "text-white bg-white/10" },
-    { id: 3, customer: "Prem", email: "prem@email.com", vehicle: "Cadillac Escalade", occasion: "Airport Transfer", tripType: "One Way", date: "14 Jul 2025", status: "Cancelled", color: "text-white bg-white/10" },
-    { id: 4, customer: "Ashwin", email: "a@email.com", vehicle: "Lincoln Continental", occasion: "Prom", tripType: "Round Trip", date: "16 Jul 2025", status: "Pending", color: "text-white bg-white/10" },
-    { id: 5, customer: "Deeksha", email: "deeksha@email.com", vehicle: "Mercedes Sprinter Van", occasion: "Other", tripType: "One Way", date: "15 Jul 2025", status: "Confirmed", color: "text-white bg-white/10" },
-    { id: 6, customer: "Prem", email: "prem@email.com", vehicle: "Chevy Suburban", occasion: "Business", tripType: "Round Trip", date: "14 Jul 2025", status: "Cancelled", color: "text-white bg-white/10" },
-    { id: 7, customer: "Ashwin", email: "a@email.com", vehicle: "Rolls Royce Ghost", occasion: "Wedding", tripType: "As Directed/Hourly", date: "16 Jul 2025", status: "Pending", color: "text-white bg-white/10" },
-    { id: 8, customer: "Deeksha", email: "deeksha@email.com", vehicle: "GMC Yukon", occasion: "Airport Transfer", tripType: "One Way", date: "15 Jul 2025", status: "Confirmed", color: "text-white bg-white/10" },
-  ];
+  useEffect(() => {
+    fetchBookings();
+  }, []);
+
+  const fetchBookings = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await getAllBookings();
+      if (response.success) {
+        setBookings(response.bookings);
+      } else {
+        setError(response.message || "Failed to fetch bookings");
+      }
+    } catch (error) {
+      console.error("Error fetching bookings:", error);
+      setError("An unexpected error occurred while fetching bookings.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredBookings = bookings.filter((b) => {
+    const searchStr = searchTerm.toLowerCase();
+    const firstName = b.contact_details?.booker?.first_name || "";
+    const lastName = b.contact_details?.booker?.last_name || "";
+    const customerName = `${firstName} ${lastName}`.toLowerCase();
+    const vehicleName = b.vehicle_details?.vehicle_name?.toLowerCase() || "";
+    const email = b.contact_details?.booker?.email?.toLowerCase() || "";
+    
+    return customerName.includes(searchStr) || 
+           vehicleName.includes(searchStr) || 
+           email.includes(searchStr);
+  });
+
+  // Pagination logic
+  const totalPages = Math.ceil(filteredBookings.length / itemsPerPage);
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentBookings = filteredBookings.slice(indexOfFirstItem, indexOfLastItem);
+
+  const handlePageChange = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-white/50">
+        <Loader2 className="animate-spin mb-4" size={32} />
+        <p>Loading bookings...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-white">
+        <div className="bg-red-500/10 border border-red-500/20 p-6 rounded-2xl text-center max-w-md">
+          <p className="text-red-400 mb-4">{error}</p>
+          <button 
+            onClick={fetchBookings}
+            className="bg-white text-black px-6 py-2 rounded-xl text-sm font-medium hover:bg-white/90 transition-colors"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -29,7 +97,10 @@ export default function AdminBookings() {
               type="text" 
               placeholder="Search bookings..." 
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setCurrentPage(1); // Reset to first page on search
+              }}
               className="bg-transparent border-none outline-none text-sm text-white px-3 w-full placeholder:text-white"
             />
           </div>
@@ -49,48 +120,86 @@ export default function AdminBookings() {
                 <th className="p-4 font-medium">Occasion Name</th>
                 <th className="p-4 font-medium">Trip Type</th>
                 <th className="p-4 font-medium">Enquiry Date</th>
+                <th className="p-4 font-medium">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5 text-white">
-              {bookings.map((row) => (
-                <tr key={row.id} className="hover:bg-white/5 transition-colors group">
-                  <td className="p-4">
-                    <input type="checkbox" className="rounded border-white/20 bg-black/50" />
-                  </td>
-                  <td className="p-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-linear-to-tr from-purple-500/20 to-blue-500/20 flex items-center justify-center text-xs font-bold border border-white/10">{row.customer[0]}</div>
-                      <div>
-                        <div className="text-white font-medium">{row.customer}</div>
-                        <div className="text-[11px] text-white">{row.email}</div>
+              {currentBookings.length > 0 ? (
+                currentBookings.map((b) => (
+                  <tr key={b._id} className="hover:bg-white/5 transition-colors group">
+                    <td className="p-4">
+                      <input type="checkbox" className="rounded border-white/20 bg-black/50" />
+                    </td>
+                    <td className="p-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-linear-to-tr from-purple-500/20 to-blue-500/20 flex items-center justify-center text-xs font-bold border border-white/10">
+                          {b.contact_details?.booker?.first_name?.[0] || "?"}
+                        </div>
+                        <div>
+                          <div className="text-white font-medium">
+                            {b.contact_details?.booker?.first_name || "Unknown"} {b.contact_details?.booker?.last_name || ""}
+                          </div>
+                          <div className="text-[11px] text-white">{b.contact_details?.booker?.email || "No email"}</div>
+                        </div>
                       </div>
-                    </div>
+                    </td>
+                    <td className="p-4 font-medium text-white">{b.vehicle_details?.vehicle_name || "N/A"}</td>
+                    <td className="p-4 text-white">{b.trip_details[0]?.occasion || "N/A"}</td>
+                    <td className="p-4 text-white">{b.trip_details[0]?.trip_type || "N/A"}</td>
+                    <td className="p-4 text-white">{moment(b.created_at).format("DD MMM YYYY")}</td>
+                    <td className="p-4">
+                      <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-white/10 text-white`}>
+                        {b.booking_status || "Pending"}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={7} className="p-10 text-center text-white/50">
+                    No bookings found
                   </td>
-                  <td className="p-4 font-medium text-white">{row.vehicle}</td>
-                  <td className="p-4 text-white">{row.occasion}</td>
-                  <td className="p-4 text-white">{row.tripType}</td>
-                  <td className="p-4 text-white">{row.date}</td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>
         
         {/* Pagination */}
-        <div className="p-4 border-t border-white/5 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-white">
-           <div>Showing 1 to 8 of 97 results</div>
-           <div className="flex items-center gap-2">
-              <button className="px-3 py-1.5 rounded-lg border border-white/10 hover:bg-white/5 transition-colors text-xs font-medium text-white flex items-center gap-1">
-                 <ChevronLeft size={14} /> Previous
-              </button>
-              <button className="w-8 h-8 rounded-lg bg-white text-black flex items-center justify-center text-xs font-bold">1</button>
-              <button className="w-8 h-8 rounded-lg border border-white/10 hover:bg-white/5 transition-colors text-white flex items-center justify-center text-xs font-medium">2</button>
-              <button className="w-8 h-8 rounded-lg border border-white/10 hover:bg-white/5 transition-colors text-white flex items-center justify-center text-xs font-medium">3</button>
-              <button className="px-3 py-1.5 rounded-lg border border-white/10 hover:bg-white/5 transition-colors text-xs font-medium text-white flex items-center gap-1">
-                 Next <ChevronRight size={14} />
-              </button>
-           </div>
-        </div>
+        {filteredBookings.length > 0 && (
+          <div className="p-4 border-t border-white/5 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-white">
+             <div>
+               Showing {indexOfFirstItem + 1} to {Math.min(indexOfLastItem, filteredBookings.length)} of {filteredBookings.length} results
+             </div>
+             <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1.5 rounded-lg border border-white/10 hover:bg-white/5 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-xs font-medium text-white flex items-center gap-1"
+                >
+                   <ChevronLeft size={14} /> Previous
+                </button>
+                
+                {[...Array(totalPages)].map((_, i) => (
+                  <button 
+                    key={i}
+                    onClick={() => handlePageChange(i + 1)}
+                    className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold transition-colors ${currentPage === i + 1 ? 'bg-white text-black' : 'border border-white/10 hover:bg-white/5 text-white'}`}
+                  >
+                    {i + 1}
+                  </button>
+                ))}
+
+                <button 
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1.5 rounded-lg border border-white/10 hover:bg-white/5 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-xs font-medium text-white flex items-center gap-1"
+                >
+                   Next <ChevronRight size={14} />
+                </button>
+             </div>
+          </div>
+        )}
       </div>
     </div>
   );
