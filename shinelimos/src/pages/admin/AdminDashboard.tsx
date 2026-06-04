@@ -21,9 +21,13 @@ export default function AdminDashboard() {
       } else {
         setError(response.message || "Failed to fetch dashboard data");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching dashboard data:", error);
-      setError("An unexpected error occurred while fetching dashboard data.");
+      if (error.response?.status === 401) {
+        setError("Your session has expired. Please log in again.");
+      } else {
+        setError("An unexpected error occurred while fetching dashboard data.");
+      }
     } finally {
       setLoading(false);
     }
@@ -303,7 +307,14 @@ export default function AdminDashboard() {
                     </span>
                   </td>
                   <td className="p-4 text-right">
-                    {row.status !== 'completed' && (
+                    {row.status === 'completed' ? (
+                      <button 
+                        onClick={() => handleUpdateStatus(row.id, 'pending')}
+                        className="bg-yellow-500/20 hover:bg-yellow-500/40 text-yellow-400 border border-yellow-500/30 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+                      >
+                        Pending
+                      </button>
+                    ) : (
                       <button 
                         onClick={() => handleUpdateStatus(row.id, 'completed')}
                         className="bg-green-500/20 hover:bg-green-500/40 text-green-400 border border-green-500/30 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"

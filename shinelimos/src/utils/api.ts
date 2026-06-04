@@ -10,6 +10,20 @@ const api = axios.create({
   },
 });
 
+// Add a request interceptor to attach the token
+api.interceptors.request.use(
+  (config) => {
+    const token = sessionStorage.getItem('adminToken') || localStorage.getItem('adminToken');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
 export const initiateBooking = async (tripDetails: any) => {
   const response = await api.post('/bookings', { trip_details: tripDetails });
   return response.data;
@@ -27,8 +41,7 @@ export const adminLogin = async (email: string, password: string) => {
 };
 
 export const logoutAdmin = async () => {
-  const response = await axios.post(`${ADMIN_BASE_URL}/admin_logout`, {}, {
-    headers: { Authorization: `Bearer ${sessionStorage.getItem('adminToken') || localStorage.getItem('adminToken')}` },
+  const response = await api.post(`${ADMIN_BASE_URL}/admin_logout`, {}, {
     withCredentials: true
   });
   return response.data;
@@ -88,23 +101,17 @@ export const getDashboardData = async () => {
 
 // Admin profile & notifications
 export const getAdminProfile = async () => {
-  const response = await axios.get(`${ADMIN_BASE_URL}/admin/profile`, {
-    headers: { Authorization: `Bearer ${sessionStorage.getItem('adminToken') || localStorage.getItem('adminToken')}` }
-  });
+  const response = await api.get(`${ADMIN_BASE_URL}/admin/profile`);
   return response.data;
 };
 
 export const getNotifications = async () => {
-  const response = await axios.get(`${ADMIN_BASE_URL}/admin/notifications`, {
-    headers: { Authorization: `Bearer ${sessionStorage.getItem('adminToken') || localStorage.getItem('adminToken')}` }
-  });
+  const response = await api.get(`${ADMIN_BASE_URL}/admin/notifications`);
   return response.data;
 };
 
 export const markNotificationsRead = async () => {
-  const response = await axios.patch(`${ADMIN_BASE_URL}/admin/notifications/read`, {}, {
-    headers: { Authorization: `Bearer ${sessionStorage.getItem('adminToken') || localStorage.getItem('adminToken')}` }
-  });
+  const response = await api.patch(`${ADMIN_BASE_URL}/admin/notifications/read`, {});
   return response.data;
 };
 

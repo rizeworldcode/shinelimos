@@ -52,34 +52,169 @@ const parseDurationToMinutes = (durationStr) => {
 	return hours * 60;
 };
 
-// Mock function for distance (In a real app, use Google Maps API)
-const getDistance = async (pickup, dropoff) => {
-	// Returning a mock distance of 10 miles for demonstration
-	return 10; 
+const axios = require("axios");
+
+// Helper to get coordinates from address details using Mapbox Geocoding API
+const getCoordsFromAddressMapbox = async (loc, details) => {
+	// If frontend already provided coordinates, use them directly for accurate pin drop
+	if (details && details.lat && details.lng) {
+		console.log(`[Mapbox Geocoding] Using provided coordinates: ${details.lat}, ${details.lng}`);
+		return { lat: details.lat, lng: details.lng };
+	}
+
+	const token = process.env.MAPBOX_ACCESS_TOKEN;
+	if (!token) {
+		console.log("MAPBOX_ACCESS_TOKEN is missing in environment variables");
+		return null;
+	}
+	try {
+		// Construct query from address details
+		// Priority order: street address parts first, then city/state/zip
+		const uniqueQueryParts = [...new Set([
+			details.flat_no,
+			details.area,
+			details.landmark,
+			details.city,
+			details.state,
+			details.postal_code
+		])].filter(Boolean);
+		
+		// If we have specific address details, prioritize those over the generic city name
+		let query = uniqueQueryParts.length > 0 ? uniqueQueryParts.join(", ") : loc;
+		
+		// Mapbox Geocoding Specific: If it's a known airport name, we can improve accuracy
+		if (loc.includes("Dulles") || loc.includes("IAD")) {
+			query = "Dulles International Airport, VA, 20166";
+		} else if (loc.includes("Reagan") || loc.includes("DCA")) {
+			query = "Ronald Reagan Washington National Airport, VA, 22202";
+		} else if (loc.includes("Washington") && loc.includes("D.C.")) {
+			// Ensure DC center is targeted correctly if no specific address
+			if (uniqueQueryParts.length <= 3) { // Just city/state/zip
+				query = "Washington, D.C., 20001";
+			}
+		}
+		console.log(`[Mapbox Geocoding] Searching for: "${query}" (Original: "${loc}")`);
+		
+		const response = await axios.get(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json`, {
+			params: {
+				access_token: token,
+				limit: 1,
+				types: 'address,poi,postcode,place,locality'
+			}
+		});
+
+		if (response.data && response.data.features && response.data.features.length > 0) {
+			const [lng, lat] = response.data.features[0].center;
+			console.log(`[Mapbox Geocoding] Found coordinates for "${query}": ${lat}, ${lng}`);
+			
+			return { lat, lng };
+		}
+
+		// Fallback: Try with the original location string if structured query failed
+		if (queryParts.length > 0 && loc && loc !== query) {
+			console.log(`[Mapbox Geocoding] Retrying with original location: "${loc}"`);
+			const fallbackResponse = await axios.get(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(loc)}.json`, {
+				params: {
+					access_token: token,
+					limit: 1,
+					types: 'address,poi,postcode,place,locality'
+				}
+			});
+
+			if (fallbackResponse.data && fallbackResponse.data.features && fallbackResponse.data.features.length > 0) {
+				const [lng, lat] = fallbackResponse.data.features[0].center;
+				console.log(`[Mapbox Geocoding] Found coordinates for fallback "${loc}": ${lat}, ${lng}`);
+				return { lat, lng };
+			}
+		}
+
+		console.log(`[Mapbox Geocoding] No results found for: "${query}" or "${loc}"`);
+		return null;
+	} catch (error) {
+		console.log(`Mapbox Geocoding error:`, error.message);
+		return null;
+	}
+};
+
+// Helper to get accurate road distance using Mapbox Directions API
+const getRoadDistanceMapbox = async (origin, destination) => {
+	const token = process.env.MAPBOX_ACCESS_TOKEN;
+	if (!token || !origin || !destination) return 10; // Fallback distance
+
+	try {
+		// Mapbox coordinates format is [longitude, latitude]
+		const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${origin.lng},${origin.lat};${destination.lng},${destination.lat}`;
+		console.log(`[Mapbox Directions] Requesting route: ${origin.lat},${origin.lng} to ${destination.lat},${destination.lng}`);
+		
+		const response = await axios.get(url, {
+			params: {
+				access_token: token,
+				overview: 'simplified'
+			}
+		});
+
+		if (response.data && response.data.routes && response.data.routes.length > 0) {
+			const distanceInMeters = response.data.routes[0].distance;
+			const distanceInMiles = distanceInMeters / 1609.34;
+			console.log(`[Mapbox Directions] Found road distance: ${distanceInMiles.toFixed(2)} miles`);
+			
+			return distanceInMiles;
+		}
+		console.log(`[Mapbox Directions] No routes found.`);
+		return 10;
+	} catch (error) {
+		console.log(`Mapbox Directions error:`, error.message);
+		return 10;
+	}
 };
 
 exports.initiateBooking = async (tripData) => {
 	try {
-		// 1. Save initial trip details
-		const booking = new Booking({ trip_details: tripData });
+		// 1. Process trip data with accurate Mapbox distance calculation
+		const processedTripData = await Promise.all(tripData.map(async (segment) => {
+			// Get coordinates for both pickup and dropoff using Mapbox Geocoding
+			const pickupCoords = await getCoordsFromAddressMapbox(segment.pickup_location, segment.pickup_details);
+			const dropoffCoords = await getCoordsFromAddressMapbox(segment.dropoff_location, segment.dropoff_details);
+
+			// Calculate road distance using Mapbox Directions API
+			const distance = await getRoadDistanceMapbox(pickupCoords, dropoffCoords);
+
+			return {
+				...segment,
+				pickup_details: {
+					...segment.pickup_details,
+					latitude: pickupCoords ? pickupCoords.lat : 0,
+					longitude: pickupCoords ? pickupCoords.lng : 0
+				},
+				dropoff_details: {
+					...segment.dropoff_details,
+					latitude: dropoffCoords ? dropoffCoords.lat : 0,
+					longitude: dropoffCoords ? dropoffCoords.lng : 0
+				},
+				distance_miles: distance
+			};
+		}));
+
+		// 2. Save initial trip details
+		const booking = new Booking({ trip_details: processedTripData });
 		const savedBooking = await booking.save();
 
-		// 2. Get total passengers and luggage from all segments
+		// 3. Get total passengers and luggage from all segments
 		let totalPass = 0;
 		let totalLuggage = 0;
-		tripData.forEach(segment => {
+		processedTripData.forEach(segment => {
 			totalPass = Math.max(totalPass, parseInt(segment.total_passengers || 0));
 			totalLuggage = Math.max(totalLuggage, parseInt(segment.total_luggage || 0));
 		});
 
-		// 3. Find suitable vehicles
+		// 4. Find suitable vehicles
 		const vehicles = await Vehicle.find({});
 		const suitableVehicles = vehicles.filter(v => 
 			parseInt(v.passenger_capacity) >= totalPass &&
 			parseInt(v.luggage_capacity) >= totalLuggage
 		);
 
-		// 4. Calculate pricing for each vehicle
+		// 5. Calculate pricing for each vehicle
 		const vehiclesWithPrice = await Promise.all(suitableVehicles.map(async (vehicle) => {
 			let totalPrice = 0;
 
@@ -99,20 +234,37 @@ exports.initiateBooking = async (tripData) => {
 				pricing.price_per_hour = priceNum;
 			}
 
-			for (const segment of tripData) {
+			for (const segment of processedTripData) {
 				const durationHours = parseDurationToHours(segment.duration);
 				const durationMinutes = parseDurationToMinutes(segment.duration);
-				const distanceMiles = await getDistance(segment.pickup_location, segment.dropoff_location);
+				const distanceMiles = segment.distance_miles || 10;
+
+				console.log(`[Pricing] Calculating segment for vehicle: ${vehicle.vehicle_name}`);
+				console.log(`[Pricing] Trip Type: ${segment.trip_type}, Distance: ${distanceMiles.toFixed(2)} mi, Duration: ${segment.duration}`);
 
 				if (segment.trip_type === "Hourly") {
-					totalPrice += durationHours * (pricing.price_per_hour || 0);
+					const segmentPrice = Math.max(1, durationHours) * (pricing.price_per_hour || 0);
+					console.log(`[Pricing] Hourly Calc: ${Math.max(1, durationHours)} hrs * $${pricing.price_per_hour}/hr = $${segmentPrice}`);
+					totalPrice += segmentPrice;
+				} else if (segment.trip_type === "Round Trip") {
+					const base = (pricing.base_price || 0);
+					const distPrice = (distanceMiles * 2 * (pricing.price_per_mile || 0));
+					const timePrice = (durationMinutes * (pricing.price_per_minute || 0));
+					const segmentPrice = base + distPrice + timePrice;
+					
+					console.log(`[Pricing] Round Trip Calc: Base($${base}) + Distance(${distanceMiles.toFixed(2)}*2 * $${pricing.price_per_mile}) + Time(${durationMinutes}m * $${pricing.price_per_minute}) = $${segmentPrice}`);
+					totalPrice += segmentPrice;
 				} else {
-					// One Way or Round Trip
-					totalPrice += (pricing.base_price || 0) + 
-								 (durationMinutes * (pricing.price_per_minute || 0)) + 
-								 (distanceMiles * (pricing.price_per_mile || 0));
+					const base = (pricing.base_price || 0);
+					const distPrice = (distanceMiles * (pricing.price_per_mile || 0));
+					const timePrice = (durationMinutes * (pricing.price_per_minute || 0));
+					const segmentPrice = base + distPrice + timePrice;
+
+					console.log(`[Pricing] One Way Calc: Base($${base}) + Distance(${distanceMiles.toFixed(2)} * $${pricing.price_per_mile}) + Time(${durationMinutes}m * $${pricing.price_per_minute}) = $${segmentPrice}`);
+					totalPrice += segmentPrice;
 				}
 			}
+			console.log(`[Pricing] Total Estimated Price for ${vehicle.vehicle_name}: $${totalPrice.toFixed(2)}`);
 
 			return {
 				_id: vehicle._id,
@@ -141,7 +293,7 @@ exports.finalizeBooking = async (bookingId, vehicleDetails, contactDetails, spec
 			vehicle_details: vehicleDetails,
 			contact_details: contactDetails,
 			special_requests: specialRequests,
-			booking_status: "confirmed",
+			booking_status: "pending",
 			updated_at: Date.now()
 		};
 

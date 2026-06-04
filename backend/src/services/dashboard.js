@@ -36,7 +36,7 @@ exports.getDashboardStats = async () => {
 
         // 3. Total Trips Status
         const completeTrips = await Booking.countDocuments({ booking_status: "completed" });
-        const pendingTrips = await Booking.countDocuments({ booking_status: "confirmed" });
+        const pendingTrips = await Booking.countDocuments({ booking_status: "pending" });
         
         const totalStatus = completeTrips + pendingTrips || 1; // avoid div by zero
 
@@ -85,7 +85,7 @@ exports.getDashboardStats = async () => {
                 date: moment(b.created_at).format("DD MMM YYYY"),
                 price: b.vehicle_details?.estimated_price ? `$${b.vehicle_details.estimated_price}` : "N/A",
                 phone: b.contact_details?.booker?.primary_phone?.number || "N/A",
-                status: b.booking_status || "confirmed"
+                status: b.booking_status || "pending"
             }))
         };
     } catch (error) {

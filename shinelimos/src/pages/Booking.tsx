@@ -4,18 +4,31 @@ import { PageHero, GoldButton, GoldDivider } from "../components/ui";
 import SectionBackground from "../components/SectionBackground";
 import TimePicker from "../components/TimePicker";
 import { initiateBooking, finalizeBooking, ADMIN_BASE_URL } from "../utils/api";
-import { LOCATIONS } from "../components/BookingWidget";
-
-declare global {
-  interface Window {
-    google: any;
-  }
-}
+import AddressSearch from "../components/AddressSearch";
 
 const BG = "https://images.pexels.com/photos/8605325/pexels-photo-8605325.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=1600&w=2400";
-import { CheckCircle, ArrowRight, ArrowLeft, MapPin, Calendar, Users, Car, User, Mail, Phone, Clock, Trash2, Plus, Briefcase, Download } from "lucide-react";
+import { CheckCircle, ArrowRight, ArrowLeft, MapPin, Calendar, Users, Car, User, Mail, Phone, Clock, Trash2, Plus, Briefcase, Download, Plane, Globe, X } from "lucide-react";
 
 const STEPS = ["Trip Itinerary", "Vehicle Selection", "Summary", "Contact Info"];
+
+interface LocationDetails {
+  flat_no: string;
+  area: string;
+  landmark: string;
+  postal_code: string;
+  city: string;
+  state: string;
+  lat?: number;
+  lng?: number;
+}
+
+interface FlightInfo {
+  international: boolean;
+  domestic: boolean;
+  departure: boolean;
+  arrival: boolean;
+  airline_flight_no: string;
+}
 
 interface Segment {
   id: number;
@@ -23,10 +36,13 @@ interface Segment {
   time: string;
   duration: string;
   pickup: string;
+  pickup_details: LocationDetails;
   dropoff: string;
+  dropoff_details: LocationDetails;
   comments: string;
   total_passengers: string;
   total_luggage: string;
+  flight_info?: FlightInfo;
 }
 
 interface Vehicle {
@@ -64,7 +80,7 @@ interface BookingData {
   passengerSecondaryPhone: string;
   passengerSecondaryPhoneType: string;
   notes: string;
-  userLocation: string;
+  marketingConsent: boolean;
 }
 
 export default function Booking() {
@@ -75,6 +91,7 @@ export default function Booking() {
   const [loading, setLoading] = useState(false);
   const [bookingId, setBookingId] = useState<string | null>(null);
   const [availableVehicles, setAvailableVehicles] = useState<Vehicle[]>([]);
+  const [activeFlightSegmentId, setActiveFlightSegmentId] = useState<number | null>(null);
 
   // use loading to avoid unused-variable warning
   if (loading) {
@@ -94,10 +111,31 @@ export default function Booking() {
         time: params.get("time") || "",
         duration: "",
         pickup: params.get("pickup") || "",
+        pickup_details: { 
+          flat_no: "", 
+          area: "", 
+          landmark: "", 
+          postal_code: params.get("pickup_zip") || "", 
+          city: params.get("pickup_city") || "",
+          state: params.get("pickup_state") || "",
+          lat: Number(params.get("pickup_lat")) || undefined,
+          lng: Number(params.get("pickup_lng")) || undefined
+        },
         dropoff: params.get("dropoff") || "",
+        dropoff_details: { 
+          flat_no: "", 
+          area: "", 
+          landmark: "", 
+          postal_code: params.get("dropoff_zip") || "", 
+          city: params.get("dropoff_city") || "",
+          state: params.get("dropoff_state") || "",
+          lat: Number(params.get("dropoff_lat")) || undefined,
+          lng: Number(params.get("dropoff_lng")) || undefined
+        },
         comments: "",
         total_passengers: String(Number(params.get("pax")) || 2),
         total_luggage: "0",
+        flight_info: { international: false, domestic: false, departure: false, arrival: false, airline_flight_no: "" }
       }
     ],
     vehicle_id: params.get("vehicle") || "",
@@ -119,21 +157,13 @@ export default function Booking() {
     passengerSecondaryPhone: "",
     passengerSecondaryPhoneType: "Home",
     notes: "",
-    userLocation: "",
+    marketingConsent: false,
   };
 
   const [data, setData] = useState<BookingData>(initialData);
 
   useEffect(() => {
     document.title = "Book Your Chauffeur | ShineLimos LLC";
-    if ("geolocation" in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          update("userLocation", `${pos.coords.latitude},${pos.coords.longitude}`);
-        },
-        (err) => console.log("Geolocation error:", err)
-      );
-    }
   }, []);
 
   const selectedVehicle: Vehicle | null = data.vehicle_details ?? availableVehicles.find((v) => v._id === data.vehicle_id) ?? null;
@@ -168,8 +198,11 @@ export default function Booking() {
           start_time: s.time,
           duration: s.duration,
           pickup_location: s.pickup,
+          pickup_details: s.pickup_details,
           dropoff_location: s.dropoff,
+          dropoff_details: s.dropoff_details,
           comment: s.comments || "",
+          flight_details: s.flight_info || { international: false, domestic: false, departure: false, arrival: false, airline_flight_no: "" },
         }));
 
         const result = await initiateBooking(tripDetails);
@@ -210,6 +243,11 @@ export default function Booking() {
     setStep((s: number) => Math.max(0, s - 1));
   };
 
+  const isValidPhone = (phone: string) => {
+    const digits = phone.replace(/\D/g, "");
+    return digits.length === 10;
+  };
+
   const submit = async () => {
     if (!bookingId) {
       setError("Unable to confirm booking. Please restart the booking flow.");
@@ -219,10 +257,31 @@ export default function Booking() {
       setError("Please enter your name, email, and primary phone number.");
       return;
     }
-    if (!data.isPassenger && (!data.passengerFirstName || !data.passengerPhone)) {
-      setError("Please enter the passenger's first name and phone number.");
+
+    if (!isValidPhone(data.primaryPhone)) {
+      setError("Please enter a valid 10-digit US primary phone number.");
       return;
     }
+    if (data.secondaryPhone && !isValidPhone(data.secondaryPhone)) {
+      setError("Please enter a valid 10-digit US secondary phone number.");
+      return;
+    }
+
+    if (!data.isPassenger) {
+      if (!data.passengerFirstName || !data.passengerPhone) {
+        setError("Please enter the passenger's first name and phone number.");
+        return;
+      }
+      if (!isValidPhone(data.passengerPhone)) {
+        setError("Please enter a valid 10-digit US passenger phone number.");
+        return;
+      }
+      if (data.passengerSecondaryPhone && !isValidPhone(data.passengerSecondaryPhone)) {
+        setError("Please enter a valid 10-digit US passenger secondary phone number.");
+        return;
+      }
+    }
+
     if (!data.vehicle_details) {
       setError("Please select a vehicle before confirming.");
       return;
@@ -274,6 +333,7 @@ export default function Booking() {
                 type: data.passengerSecondaryPhoneType,
               },
             },
+        marketing_consent: data.marketingConsent,
       };
 
       const result = await finalizeBooking({
@@ -348,17 +408,29 @@ export default function Booking() {
 
           <div class="section">
             <h2>Itinerary</h2>
-            ${data.segments.map((seg, idx) => `
+            ${data.segments.map((seg, idx) => {
+              const formatAddr = (loc: string, details: LocationDetails) => {
+                const parts = [
+                  details.flat_no,
+                  details.area,
+                  details.landmark ? `(Near ${details.landmark})` : '',
+                  loc,
+                  details.city,
+                  details.postal_code
+                ].filter(Boolean);
+                return parts.join(", ") || loc;
+              };
+              return `
               <div style="margin-bottom: 15px; padding: 15px; background: #f9f9f9; border-radius: 8px;">
                 <h4 style="margin-top:0; color:#d4af37;">Segment ${idx + 1}</h4>
                 <div class="row"><div class="label">Date:</div><div class="val">${seg.date}</div></div>
                 <div class="row"><div class="label">Time:</div><div class="val">${seg.time}</div></div>
-                <div class="row"><div class="label">Pickup Location:</div><div class="val">${seg.pickup}</div></div>
-                <div class="row"><div class="label">Drop-off Location:</div><div class="val">${seg.dropoff}</div></div>
+                <div class="row"><div class="label">Pickup Location:</div><div class="val">${formatAddr(seg.pickup, seg.pickup_details)}</div></div>
+                <div class="row"><div class="label">Drop-off Location:</div><div class="val">${formatAddr(seg.dropoff, seg.dropoff_details)}</div></div>
                 ${seg.duration ? `<div class="row"><div class="label">Duration:</div><div class="val">${seg.duration}</div></div>` : ''}
                 ${seg.comments ? `<div class="row"><div class="label">Comments:</div><div class="val">${seg.comments}</div></div>` : ''}
               </div>
-            `).join('')}
+            `}).join('')}
           </div>
 
           <div class="section">
@@ -405,8 +477,8 @@ export default function Booking() {
               <Detail label="Vehicle" value={selectedVehicle?.vehicle_name || "Not selected"} />
               <Detail label="Passengers" value={`${data.pax}`} />
               <Detail label="Luggage" value={data.bags > 0 ? `${data.bags} ${data.bagSize ? `(${data.bagSize})` : ""}` : "None"} />
-              <Detail label="Pickup" value={data.segments[0]?.pickup} />
-              <Detail label="Drop-off" value={data.segments[0]?.dropoff} />
+              <Detail label="Pickup" value={`${data.segments[0]?.pickup_details?.flat_no ? data.segments[0].pickup_details.flat_no + ', ' : ''}${data.segments[0]?.pickup}`} />
+              <Detail label="Drop-off" value={`${data.segments[0]?.dropoff_details?.flat_no ? data.segments[0].dropoff_details.flat_no + ', ' : ''}${data.segments[0]?.dropoff}`} />
               <Detail label="Date" value={data.segments[0]?.date} />
               <Detail label="Time" value={data.segments[0]?.time} />
             </div>
@@ -449,7 +521,13 @@ export default function Booking() {
           </div>
 
           <div className="glass-dark rounded-3xl p-6 md:p-10 min-h-[520px]">
-            {step === 0 && <Step1 data={data} update={update} />}
+            {step === 0 && (
+              <Step1 
+                data={data} 
+                update={update} 
+                onOpenFlightInfo={(id) => setActiveFlightSegmentId(id)} 
+              />
+            )}
             {step === 1 && <Step2 data={data} availableVehicles={availableVehicles} onSelectVehicle={(vehicle: Vehicle) => {
               update("vehicle_id", vehicle._id);
               update("vehicle_details", vehicle);
@@ -485,6 +563,23 @@ export default function Booking() {
         </div>
       </SectionBackground>
 
+      {/* Flight Info Modal */}
+      {activeFlightSegmentId !== null && (
+        <FlightInfoModal
+          isOpen={activeFlightSegmentId !== null}
+          onClose={() => setActiveFlightSegmentId(null)}
+          data={data.segments.find(s => s.id === activeFlightSegmentId)?.flight_info || { international: false, domestic: false, departure: false, arrival: false, airline_flight_no: "" }}
+          onSave={(flightData) => {
+            update("segments", data.segments.map(s => s.id === activeFlightSegmentId ? { ...s, flight_info: flightData } : s));
+            setActiveFlightSegmentId(null);
+          }}
+          onClear={() => {
+            update("segments", data.segments.map(s => s.id === activeFlightSegmentId ? { ...s, flight_info: { international: false, domestic: false, departure: false, arrival: false, airline_flight_no: "" } } : s));
+            setActiveFlightSegmentId(null);
+          }}
+        />
+      )}
+
       <GoldDivider />
     </div>
   );
@@ -503,62 +598,24 @@ function inputCls() {
   return "w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-gold/60 focus:bg-gold/5 transition-all";
 }
 
-function LocationInput({ value, onChange, placeholder, icon: Icon, label }: { value: string; onChange: (val: string) => void; placeholder: string; icon: any; label: string }) {
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (!window.google || !inputRef.current) return;
-
-    const autocomplete = new window.google.maps.places.Autocomplete(inputRef.current, {
-      types: ["address"],
-      componentRestrictions: { country: "us" }, // Optional: restrict to US
-    });
-
-    autocomplete.addListener("place_changed", () => {
-      const place = autocomplete.getPlace();
-      if (place.formatted_address) {
-        onChange(place.formatted_address);
-      } else if (place.name) {
-        onChange(place.name);
-      }
-    });
-
-    // Prevent form submission on enter
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-      }
-    };
-    inputRef.current.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      if (inputRef.current) {
-        inputRef.current.removeEventListener("keydown", handleKeyDown);
-      }
-      window.google.maps.event.clearInstanceListeners(autocomplete);
-    };
-  }, [onChange]);
-
-  return (
-    <Field icon={Icon} label={label}>
-      <input
-        ref={inputRef}
-        type="text"
-        className={inputCls()}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        required
-      />
-    </Field>
-  );
-}
-
-function Step1({ data, update }: { data: BookingData; update: (k: keyof BookingData, v: any) => void }) {
+function Step1({ data, update, onOpenFlightInfo }: { data: BookingData; update: (k: keyof BookingData, v: any) => void; onOpenFlightInfo: (id: number) => void }) {
   const addSegment = () => {
     update("segments", [
       ...data.segments,
-      { id: Date.now(), date: "", time: "", duration: "", pickup: "", dropoff: "", comments: "", total_passengers: "2", total_luggage: "0" }
+      { 
+        id: Date.now(), 
+        date: "", 
+        time: "", 
+        duration: "", 
+        pickup: "", 
+        pickup_details: { flat_no: "", area: "", landmark: "", postal_code: "", city: "", state: "" },
+        dropoff: "", 
+        dropoff_details: { flat_no: "", area: "", landmark: "", postal_code: "", city: "", state: "" },
+        comments: "", 
+        total_passengers: "2", 
+        total_luggage: "0",
+        flight_info: { international: false, domestic: false, departure: false, arrival: false, airline_flight_no: "" }
+      }
     ]);
   };
 
@@ -568,7 +625,7 @@ function Step1({ data, update }: { data: BookingData; update: (k: keyof BookingD
     }
   };
 
-  const updateSegment = (id: number, key: keyof Segment, value: string) => {
+  const updateSegment = (id: number, key: keyof Segment, value: any) => {
     update("segments", data.segments.map((s: Segment) => s.id === id ? { ...s, [key]: value } : s));
   };
 
@@ -582,12 +639,36 @@ function Step1({ data, update }: { data: BookingData; update: (k: keyof BookingD
         time: "", 
         duration: lastSeg.duration, 
          pickup: lastSeg.dropoff, 
+         pickup_details: { ...lastSeg.dropoff_details },
          dropoff: lastSeg.pickup, 
+         dropoff_details: { ...lastSeg.pickup_details },
          comments: "",
          total_passengers: lastSeg.total_passengers || String(data.pax),
          total_luggage: lastSeg.total_luggage || String(data.bags),
+         flight_info: lastSeg.flight_info ? { ...lastSeg.flight_info } : { international: false, domestic: false, departure: false, arrival: false, airline_flight_no: "" }
       }
     ]);
+  };
+
+  const updateSegmentLocation = (id: number, type: 'pickup' | 'dropoff', address: string, details: any) => {
+    update("segments", data.segments.map((s: Segment) => {
+      if (s.id === id) {
+        const detailsKey = type === 'pickup' ? 'pickup_details' : 'dropoff_details';
+        return {
+          ...s,
+          [type]: address,
+          [detailsKey]: {
+            ...s[detailsKey],
+            city: details?.city || "",
+            state: details?.state || "",
+            postal_code: details?.postal_code || "",
+            lat: details?.lat || undefined,
+            lng: details?.lng || undefined
+          }
+        };
+      }
+      return s;
+    }));
   };
 
   return (
@@ -595,8 +676,8 @@ function Step1({ data, update }: { data: BookingData; update: (k: keyof BookingD
       <div className="text-[10px] tracking-[0.25em] text-gold uppercase py-3 px-5 rounded-t-2xl border border-white/10 border-b-0 bg-white/5 font-medium">Itinerary</div>
       <div className="space-y-6 mb-8 border border-white/10 border-t-0 rounded-b-2xl p-5 bg-white/5">
         {data.segments.map((seg: any, index: number) => (
-          <div key={seg.id} className="border border-white/10 rounded-2xl overflow-hidden bg-black/20">
-            <div className="bg-white/5 text-white py-3 px-5 flex justify-between items-center border-b border-white/10">
+          <div key={seg.id} className="border border-white/10 rounded-2xl bg-black/20 relative">
+            <div className="bg-white/5 text-white py-3 px-5 flex justify-between items-center border-b border-white/10 rounded-t-2xl">
               <span className="font-semibold text-[11px] tracking-widest uppercase text-gold">Segment {index + 1}</span>
               {data.segments.length > 1 && (
                 <button onClick={() => removeSegment(seg.id)} className="text-white/50 hover:text-red-400 transition-colors">
@@ -613,14 +694,25 @@ function Step1({ data, update }: { data: BookingData; update: (k: keyof BookingD
                   <TimePicker className={inputCls()} value={seg.time} onChange={(v) => updateSegment(seg.id, "time", v)} />
                 </Field>
                 <Field icon={Clock} label="Duration">
-                  <select className={inputCls()} value={seg.duration} onChange={(e) => updateSegment(seg.id, "duration", e.target.value)}>
-                    <option className="bg-[#1a1a1a]" value="">— Not Selected —</option>
-                    <option className="bg-[#1a1a1a]" value="1 hour">1 Hour</option>
-                    <option className="bg-[#1a1a1a]" value="2 hours">2 Hours</option>
-                    <option className="bg-[#1a1a1a]" value="3 hours">3 Hours</option>
-                    <option className="bg-[#1a1a1a]" value="4 hours">4 Hours</option>
-                    <option className="bg-[#1a1a1a]" value="5+ hours">5+ Hours</option>
-                  </select>
+                  <div className="flex gap-2">
+                    <select className={inputCls()} value={seg.duration} onChange={(e) => updateSegment(seg.id, "duration", e.target.value)}>
+                      <option className="bg-[#1a1a1a]" value="">— Not Selected —</option>
+                      <option className="bg-[#1a1a1a]" value="1 hour">1 Hour</option>
+                      <option className="bg-[#1a1a1a]" value="2 hours">2 Hours</option>
+                      <option className="bg-[#1a1a1a]" value="3 hours">3 Hours</option>
+                      <option className="bg-[#1a1a1a]" value="4 hours">4 Hours</option>
+                      <option className="bg-[#1a1a1a]" value="5+ hours">5+ Hours</option>
+                    </select>
+                    <button 
+                      onClick={() => onOpenFlightInfo(seg.id)}
+                      className={`shrink-0 aspect-square w-[46px] border rounded-xl flex items-center justify-center transition-all ${
+                        seg.flight_info?.airline_flight_no ? 'border-gold bg-gold/10 text-gold' : 'border-white/10 hover:border-white/30 text-white/50 hover:text-white'
+                      }`}
+                      title="Add Flight Info"
+                    >
+                      <Plane className="w-5 h-5" />
+                    </button>
+                  </div>
                 </Field>
               </div>
 
@@ -630,13 +722,14 @@ function Step1({ data, update }: { data: BookingData; update: (k: keyof BookingD
                     {index + 1}A
                   </div>
                   <div className="flex-1">
-                    <LocationInput
-                      label="Address (Pick-up) *"
-                      icon={MapPin}
-                      placeholder="Enter pickup address..."
-                      value={seg.pickup}
-                      onChange={(v) => updateSegment(seg.id, "pickup", v)}
-                    />
+                    <Field icon={MapPin} label="Address (Pick-up) *">
+                      <AddressSearch
+                        value={seg.pickup}
+                        onChange={(addr, details) => updateSegmentLocation(seg.id, "pickup", addr, details)}
+                        placeholder="Enter pickup address"
+                        className={inputCls()}
+                      />
+                    </Field>
                   </div>
                 </div>
                 
@@ -645,28 +738,20 @@ function Step1({ data, update }: { data: BookingData; update: (k: keyof BookingD
                     {index + 1}B
                   </div>
                   <div className="flex-1">
-                    <LocationInput
-                      label="Address (Drop-off) *"
-                      icon={MapPin}
-                      placeholder="Enter drop-off address..."
-                      value={seg.dropoff}
-                      onChange={(v) => updateSegment(seg.id, "dropoff", v)}
-                    />
-                    {(seg.pickup && seg.dropoff) ? (
-                      <a href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(seg.pickup)}&destination=${encodeURIComponent(seg.dropoff)}`} target="_blank" rel="noreferrer" className="text-xs text-blue-400 hover:text-blue-300 hover:underline inline-flex items-center gap-1 mt-2">
-                        <MapPin className="w-3 h-3 inline" /> Preview on Google Maps
-                      </a>
-                    ) : (
-                      <a href={data.userLocation ? `https://www.google.com/maps?q=${data.userLocation}` : "#"} onClick={(e) => !data.userLocation && e.preventDefault()} target={data.userLocation ? "_blank" : undefined} rel="noreferrer" className="text-xs text-blue-400 hover:text-blue-300 hover:underline inline-flex items-center gap-1 mt-2 opacity-80">
-                        <MapPin className="w-3 h-3 inline" /> Preview on Google Maps
-                      </a>
-                    )}
+                    <Field icon={MapPin} label="Address (Drop-off) *">
+                      <AddressSearch
+                        value={seg.dropoff}
+                        onChange={(addr, details) => updateSegmentLocation(seg.id, "dropoff", addr, details)}
+                        placeholder="Enter drop-off address"
+                        className={inputCls()}
+                      />
+                    </Field>
                   </div>
                 </div>
               </div>
 
               <div className="pt-2">
-                <input className={inputCls()} value={seg.comments} onChange={(e) => updateSegment(seg.id, "comments", e.target.value)} placeholder="Comments..." />
+                <input className={inputCls()} value={seg.comments} onChange={(e) => updateSegment(seg.id, "comments", e.target.value)} placeholder="Comments (Optional)" />
               </div>
             </div>
           </div>
@@ -784,6 +869,18 @@ function Step2({ data, availableVehicles, onSelectVehicle }: { data: BookingData
 }
 
 function Step3Summary({ data, vehicle }: any) {
+  const formatAddress = (loc: string, details: LocationDetails) => {
+    const parts = [
+      details.flat_no,
+      details.area,
+      details.landmark ? `(Near ${details.landmark})` : '',
+      loc,
+      details.city,
+      details.postal_code
+    ].filter(Boolean);
+    return parts.join(", ") || loc;
+  };
+
   return (
     <>
       <h3 className="font-serif-lux text-3xl gradient-gold-text">Summary</h3>
@@ -796,8 +893,8 @@ function Step3Summary({ data, vehicle }: any) {
             <div className="grid md:grid-cols-2 gap-4">
               <Detail label="Date" value={seg.date} />
               <Detail label="Time" value={seg.time} />
-              <Detail label="Pickup" value={seg.pickup} />
-              <Detail label="Drop-off" value={seg.dropoff} />
+              <Detail label="Pickup" value={formatAddress(seg.pickup, seg.pickup_details)} />
+              <Detail label="Drop-off" value={formatAddress(seg.dropoff, seg.dropoff_details)} />
               {seg.duration && <Detail label="Duration" value={seg.duration} />}
               {seg.comments && <Detail label="Comments" value={seg.comments} />}
             </div>
@@ -816,7 +913,21 @@ function Step3Summary({ data, vehicle }: any) {
   );
 }
 
+function formatPhoneNumber(value: string) {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length === 0) return "";
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6, 10)}`;
+}
+
 function Step4Contact({ data, update }: { data: BookingData; update: (k: keyof BookingData, v: any) => void }) {
+  const handlePhoneChange = (key: keyof BookingData, value: string) => {
+    // Only allow digits to be processed
+    const digits = value.replace(/\D/g, "").slice(0, 10);
+    update(key, formatPhoneNumber(digits));
+  };
+
   return (
     <>
       <div className="text-[10px] tracking-[0.25em] text-gold uppercase py-3 px-5 rounded-t-2xl border border-white/10 border-b-0 bg-white/5 font-medium">Your Information</div>
@@ -842,7 +953,7 @@ function Step4Contact({ data, update }: { data: BookingData; update: (k: keyof B
                   type="tel" 
                   className={`${inputCls()} pl-[60px] w-full`} 
                   value={data.primaryPhone} 
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => update("primaryPhone", e.target.value.replace(/[^0-9\s()-]/g, ''))} 
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => handlePhoneChange("primaryPhone", e.target.value)} 
                   placeholder="(202) 555-0000" 
                   maxLength={14}
                 />
@@ -868,7 +979,7 @@ function Step4Contact({ data, update }: { data: BookingData; update: (k: keyof B
                   type="tel" 
                   className={`${inputCls()} pl-[60px] w-full`} 
                   value={data.secondaryPhone} 
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => update("secondaryPhone", e.target.value.replace(/[^0-9\s()-]/g, ''))} 
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => handlePhoneChange("secondaryPhone", e.target.value)} 
                   placeholder="(Optional)" 
                   maxLength={14}
                 />
@@ -928,7 +1039,7 @@ function Step4Contact({ data, update }: { data: BookingData; update: (k: keyof B
                       type="tel" 
                       className={`${inputCls()} pl-[60px] w-full`} 
                       value={data.passengerPhone} 
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => update("passengerPhone", e.target.value.replace(/[^0-9\s()-]/g, ''))} 
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => handlePhoneChange("passengerPhone", e.target.value)} 
                       placeholder="(202) 555-0000" 
                       maxLength={14}
                     />
@@ -954,7 +1065,7 @@ function Step4Contact({ data, update }: { data: BookingData; update: (k: keyof B
                       type="tel" 
                       className={`${inputCls()} pl-[60px] w-full`} 
                       value={data.passengerSecondaryPhone} 
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => update("passengerSecondaryPhone", e.target.value.replace(/[^0-9\s()-]/g, ''))} 
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => handlePhoneChange("passengerSecondaryPhone", e.target.value)} 
                       placeholder="(Optional)" 
                       maxLength={14}
                     />
@@ -972,6 +1083,27 @@ function Step4Contact({ data, update }: { data: BookingData; update: (k: keyof B
             </div>
           </div>
         )}
+
+        <div className="pt-4 border-t border-white/10">
+          <label className="flex items-start gap-3 cursor-pointer group">
+            <div className="relative flex items-center mt-1">
+              <input 
+                type="checkbox" 
+                className="peer h-5 w-5 cursor-pointer appearance-none rounded border border-white/20 bg-white/5 transition-all checked:border-gold checked:bg-gold/20 hover:border-gold/50"
+                checked={data.marketingConsent}
+                onChange={(e) => update("marketingConsent", e.target.checked)}
+              />
+              <span className="absolute text-gold opacity-0 peer-checked:opacity-100 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor" stroke="currentColor" strokeWidth="1">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"></path>
+                </svg>
+              </span>
+            </div>
+            <span className="text-xs text-white/70 leading-relaxed select-none group-hover:text-white/90 transition-colors">
+              I agree to receive recurring promotional and marketing text messages from Shine Limos at the phone number provided. Consent is not a condition of purchase. Reply STOP to opt out.
+            </span>
+          </label>
+        </div>
       </div>
 
       <div className="text-[10px] tracking-[0.25em] text-gold uppercase py-3 px-5 rounded-t-2xl border border-white/10 border-b-0 bg-white/5 font-medium mt-6">Comments</div>
@@ -996,5 +1128,110 @@ function Field({ icon: Icon, label, children }: { icon: React.ElementType; label
       </span>
       {children}
     </label>
+  );
+}
+
+function FlightInfoModal({ 
+  isOpen, 
+  onClose, 
+  data, 
+  onSave, 
+  onClear 
+}: { 
+  isOpen: boolean; 
+  onClose: () => void; 
+  data: FlightInfo; 
+  onSave: (newData: FlightInfo) => void;
+  onClear: () => void;
+}) {
+  const [localData, setLocalData] = useState<FlightInfo>(data);
+
+  useEffect(() => {
+    setLocalData(data);
+  }, [data, isOpen]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-[#1e293b] w-full max-w-[320px] rounded-xl overflow-hidden shadow-2xl border border-white/10">
+        <div className="bg-[#2d3748] px-4 py-2 flex justify-between items-center border-b border-white/5">
+          <span className="text-white font-semibold text-sm">Flight Info</span>
+          <button onClick={onClose} className="text-white/60 hover:text-white transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        
+        <div className="p-4 space-y-4">
+          <div className="flex gap-2">
+            <button 
+              type="button"
+              onClick={() => setLocalData({ ...localData, international: true, domestic: false })}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 px-1 rounded text-[11px] font-medium transition-all ${localData.international ? 'bg-[#337ab7] text-white shadow-lg' : 'bg-[#2d3748] text-white/70 hover:bg-[#3d485a]'}`}
+            >
+              <Globe className="w-3 h-3" /> International
+            </button>
+            <button 
+              type="button"
+              onClick={() => setLocalData({ ...localData, international: false, domestic: true })}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 px-1 rounded text-[11px] font-medium transition-all ${localData.domestic ? 'bg-[#337ab7] text-white shadow-lg' : 'bg-[#2d3748] text-white/70 hover:bg-[#3d485a]'}`}
+            >
+              <Globe className="w-3 h-3" /> Domestic
+            </button>
+          </div>
+
+          <div className="flex gap-2">
+            <button 
+              type="button"
+              onClick={() => setLocalData({ ...localData, departure: true, arrival: false })}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 px-1 rounded text-[11px] font-medium transition-all ${localData.departure ? 'bg-[#337ab7] text-white shadow-lg' : 'bg-[#2d3748] text-white/70 hover:bg-[#3d485a]'}`}
+            >
+              <Plane className="w-3 h-3 -rotate-45" /> Departure
+            </button>
+            <button 
+              type="button"
+              onClick={() => setLocalData({ ...localData, departure: false, arrival: true })}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 px-1 rounded text-[11px] font-medium transition-all ${localData.arrival ? 'bg-[#337ab7] text-white shadow-lg' : 'bg-[#2d3748] text-white/70 hover:bg-[#3d485a]'}`}
+            >
+              <Plane className="w-3 h-3 rotate-45" /> Arrival
+            </button>
+          </div>
+
+          <div className="relative">
+            <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+              <Plane className="w-4 h-4 text-[#333]/40" />
+            </div>
+            <input 
+              type="text"
+              placeholder="Airline & Flight #"
+              className="w-full bg-white text-[#333] rounded-lg py-2.5 pl-10 pr-4 text-sm focus:outline-none placeholder:text-gray-400"
+              value={localData.airline_flight_no}
+              onChange={(e) => setLocalData({ ...localData, airline_flight_no: e.target.value })}
+            />
+          </div>
+
+          <div className="flex gap-2 pt-2">
+            <button 
+              type="button"
+              onClick={() => onSave(localData)}
+              className="flex-1 bg-[#5cb85c] hover:bg-[#4cae4c] text-white py-2 rounded font-medium text-sm transition-colors shadow-md active:scale-95"
+            >
+              Save & Close
+            </button>
+            <button 
+              type="button"
+              onClick={() => {
+                const cleared = { international: false, domestic: false, departure: false, arrival: false, airline_flight_no: "" };
+                setLocalData(cleared);
+                onClear();
+              }}
+              className="bg-[#c9302c] hover:bg-[#ac2925] text-white px-4 py-2 rounded font-medium text-sm transition-colors shadow-md active:scale-95"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

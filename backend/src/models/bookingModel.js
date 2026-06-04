@@ -11,10 +11,29 @@ const bookingSchema = new mongoose.Schema({
       type: String,
       required: true,
     },
+    pickup_details: {
+      flat_no: String,
+      area: String,
+      landmark: String,
+      postal_code: String,
+      city: String,
+      latitude: Number,
+      longitude: Number,
+    },
     dropoff_location: {
       type: String,
       required: true,
     },
+    dropoff_details: {
+      flat_no: String,
+      area: String,
+      landmark: String,
+      postal_code: String,
+      city: String,
+      latitude: Number,
+      longitude: Number,
+    },
+    distance_miles: Number,
     start_time: {
       type: String,
       required: true,
@@ -29,7 +48,7 @@ const bookingSchema = new mongoose.Schema({
     },
     comment: {
       type: String,
-      required: true,
+      required: false,
     },
     flight_details: {
       international: {
@@ -47,6 +66,10 @@ const bookingSchema = new mongoose.Schema({
       arrival: {
         type: Boolean,
         default: false,
+      },
+      airline_flight_no: {
+        type: String,
+        default: "",
       },
     },
     trip_type: {
@@ -113,12 +136,16 @@ const bookingSchema = new mongoose.Schema({
         type: { type: String, default: "Home" }
       },
       email: String
+    },
+    marketing_consent: {
+      type: Boolean,
+      default: false
     }
   },
   special_requests: String,
   booking_status: {
     type: String,
-    default: "panding",
+    default: "pending",
   },
   transaction_id: {
     type: mongoose.Schema.Types.ObjectId,

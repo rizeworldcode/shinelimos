@@ -1,5 +1,7 @@
 // Site-wide content & SEO data
 
+export const MAPBOX_PUBLIC_TOKEN = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN || "";
+
 export const COMPANY = {
   name: "ShineLimos LLC",
   tagline: "Washington DC's Premier Black Car & Chauffeur Service",

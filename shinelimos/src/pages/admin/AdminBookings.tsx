@@ -25,9 +25,13 @@ export default function AdminBookings() {
       } else {
         setError(response.message || "Failed to fetch bookings");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching bookings:", error);
-      setError("An unexpected error occurred while fetching bookings.");
+      if (error.response?.status === 401) {
+        setError("Your session has expired. Please log in again.");
+      } else {
+        setError("An unexpected error occurred while fetching bookings.");
+      }
     } finally {
       setLoading(false);
     }
@@ -126,9 +130,6 @@ export default function AdminBookings() {
           <table className="w-full text-left text-sm whitespace-nowrap">
             <thead className="bg-white/5 text-white text-[11px] uppercase tracking-wider">
               <tr>
-                <th className="p-4 w-10">
-                   <input type="checkbox" className="rounded border-white/20 bg-black/50" />
-                </th>
                 <th className="p-4 font-medium">Customer</th>
                 <th className="p-4 font-medium">Vehicle Name</th>
                 <th className="p-4 font-medium">Occasion Name</th>
@@ -142,9 +143,6 @@ export default function AdminBookings() {
               {currentBookings.length > 0 ? (
                 currentBookings.map((b) => (
                   <tr key={b._id} className="hover:bg-white/5 transition-colors group">
-                    <td className="p-4">
-                      <input type="checkbox" className="rounded border-white/20 bg-black/50" />
-                    </td>
                     <td className="p-4">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-linear-to-tr from-purple-500/20 to-blue-500/20 flex items-center justify-center text-xs font-bold border border-white/10">

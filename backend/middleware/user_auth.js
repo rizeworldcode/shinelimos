@@ -6,11 +6,15 @@ const user_model = require("../src/models/adminModel");
 async function user_auth(req, res, next) {
   try {
     const tokenHead = req.headers["authorization"];
-    console.log(tokenHead );
+    console.log(tokenHead);
+
+    if (!tokenHead) {
+      return res.status(401).json({ message: "Authorization header is missing", success: false });
+    }
 
     const token = tokenHead.split(" ")[1];
     if (!token) {
-      return res.status(401).json({ message: "User is not logged in" });
+      return res.status(401).json({ message: "User is not logged in", success: false });
     }
     const jwtPassword = process.env.SECRET_KEY;
     const decode = jwt.verify(token, jwtPassword);
@@ -23,10 +27,10 @@ async function user_auth(req, res, next) {
     next();
   } catch (error) {
     console.log(error);
-    return {
-        message: error.message || "Internal server error",
-        success: false,
-      };
+    return res.status(500).json({
+      message: error.message || "Internal server error",
+      success: false,
+    });
   }
 }
 

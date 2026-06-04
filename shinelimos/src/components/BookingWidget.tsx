@@ -4,83 +4,15 @@ import { GoldButton } from "./ui";
 import TimePicker from "./TimePicker";
 import { FLEET } from "../data";
 import { useNavigate } from "react-router-dom";
-
-export const LOCATIONS = [
-  "Washington",
-  "Arlington",
-  "Alexandria",
-  "Tysons",
-  "Fairfax",
-  "Reston",
-  "Herndon",
-  "Bethesda",
-  "Rockville",
-  "Silver Spring",
-  "Dulles International Airport",
-  "Ronald Reagan Washington National Airport"
-];
-
-function AutocompleteInput({ value, onChange, placeholder, icon, label, className }: { value: string; onChange: (val: string) => void; placeholder: string; icon: any; label: string; className?: string }) {
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (!window.google || !inputRef.current) return;
-
-    const autocomplete = new window.google.maps.places.Autocomplete(inputRef.current, {
-      types: ["address"],
-      componentRestrictions: { country: "us" },
-    });
-
-    autocomplete.addListener("place_changed", () => {
-      const place = autocomplete.getPlace();
-      if (place.formatted_address) {
-        onChange(place.formatted_address);
-      } else if (place.name) {
-        onChange(place.name);
-      }
-    });
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-      }
-    };
-    inputRef.current.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      if (inputRef.current) {
-        inputRef.current.removeEventListener("keydown", handleKeyDown);
-      }
-      window.google.maps.event.clearInstanceListeners(autocomplete);
-    };
-  }, [onChange]);
-
-  return (
-    <label className="block">
-      <span className="text-[10px] tracking-[0.25em] uppercase text-white/55 mb-1.5 block">{label}</span>
-      <div className="relative">
-        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gold pointer-events-none">
-          {icon && <span className="[&>svg]:h-4 [&>svg]:w-4">{icon}</span>}
-        </span>
-        <input
-          ref={inputRef}
-          type="text"
-          className={className}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          required
-        />
-      </div>
-    </label>
-  );
-}
+import AddressSearch from "./AddressSearch";
 
 export default function BookingWidget({ compact = false }: { compact?: boolean }) {
   const navigate = useNavigate();
   const [tab, setTab] = useState<"one-way" | "round-trip" | "hourly">("one-way");
   const [pickup, setPickup] = useState("");
+  const [pickupDetails, setPickupDetails] = useState<any>(null);
   const [dropoff, setDropoff] = useState("");
+  const [dropoffDetails, setDropoffDetails] = useState<any>(null);
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [pax, setPax] = useState(2);
@@ -91,8 +23,18 @@ export default function BookingWidget({ compact = false }: { compact?: boolean }
     
     const q = new URLSearchParams({
       type: tab,
-      pickup,
-      dropoff,
+      pickup: pickup,
+      pickup_zip: pickupDetails?.postal_code || "",
+      pickup_city: pickupDetails?.city || "",
+      pickup_state: pickupDetails?.state || "",
+      pickup_lat: pickupDetails?.lat || "",
+      pickup_lng: pickupDetails?.lng || "",
+      dropoff: dropoff,
+      dropoff_zip: dropoffDetails?.postal_code || "",
+      dropoff_city: dropoffDetails?.city || "",
+      dropoff_state: dropoffDetails?.state || "",
+      dropoff_lat: dropoffDetails?.lat || "",
+      dropoff_lng: dropoffDetails?.lng || "",
       date,
       time,
       pax: String(pax),
@@ -119,22 +61,28 @@ export default function BookingWidget({ compact = false }: { compact?: boolean }
       </div>
 
       <form onSubmit={submit} className="grid gap-4 md:grid-cols-2">
-        <AutocompleteInput
-          label="Pickup Location"
-          icon={<MapPin />}
-          placeholder="Enter pickup location"
-          value={pickup}
-          onChange={setPickup}
-          className="field"
-        />
-        <AutocompleteInput
-          label="Drop-off Location"
-          icon={<MapPin />}
-          placeholder="Enter drop-off location"
-          value={dropoff}
-          onChange={setDropoff}
-          className="field"
-        />
+        <Field icon={<MapPin />} label="Pickup Location">
+          <AddressSearch
+            value={pickup}
+            onChange={(addr, details) => {
+              setPickup(addr);
+              setPickupDetails(details);
+            }}
+            placeholder="Enter pickup address"
+            className="field"
+          />
+        </Field>
+        <Field icon={<MapPin />} label="Drop-off Location">
+          <AddressSearch
+            value={dropoff}
+            onChange={(addr, details) => {
+              setDropoff(addr);
+              setDropoffDetails(details);
+            }}
+            placeholder="Enter drop-off address"
+            className="field"
+          />
+        </Field>
         <Field icon={<Calendar />} label="Date">
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required className="field" />
         </Field>
